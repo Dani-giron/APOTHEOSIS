@@ -7,19 +7,15 @@ from common.constants import *
 from common.errors import NodeUnsupportedAlgorithm
 
 class WinPageHashNode(HashNode):
-    def __init__(self, id, hash_algorithm: HashAlgorithm, module: Module=None, db_manager: DBManager=None):
+    def __init__(self, id, hash_algorithm: HashAlgorithm, module: Module=None):
         super().__init__(id, hash_algorithm)
         self._real_module = module
-        self._db_manager = db_manager
 
     @property
     def _module(self):
-        if not self._real_module and self._db_manager is not None:
-            self._real_module = self._db_manager.get_winpage_module_by_id(self._hash_algorithm, self._id)
+        if not self._real_module:
+            self._real_module = DBManager.get_winpage_module_by_hash(self._hash_algorithm, self._id)
         return self._real_module
-
-    def __lt__(self, other): # Hack for priority queue. TODO: not needed here?
-        return False
 
     def get_module(self):
         return self._module

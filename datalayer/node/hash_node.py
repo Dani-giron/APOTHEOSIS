@@ -47,3 +47,7 @@ class HashNode(Node):
             "hash_algorithm": self._hash_algorithm.__name__
         }
 
+    def get_draw_features(self):
+        return {"id":  {
+            "id:": self._id}
+        }

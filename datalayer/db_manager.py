@@ -128,6 +128,45 @@ class DBManager():
         module = self._row_to_module(row)
         return module
     
+    @classmethod
+    def get_winpage_module_by_hash(self, algorithm : HashAlgorithm, hash_value: str = ""):
+        with open('settings.yaml', 'r') as file:
+            config = yaml.safe_load(file)
+            connection = mysql.connector.connect(
+                host=config["db_host"],
+                user=config["db_user"],
+                password=config["db_password"],
+                database=config["db_name"],
+                port=config["db_port"]
+            )
+            cursor = connection.cursor(dictionary=True)
+
+            logger.info(f"Getting results for \"{hash_value}\" from DB ({algorithm})")
+            hash_column = "hashTLSH" if algorithm == TLSHHashAlgorithm else "hashSSDEEP"
+
+            query = SQL_GET_MODULE_BY_HASH.format(hash_column, hash_column)
+            cursor.execute(query, (hash_value,))
+            row = cursor.fetchone()
+
+            if not row:
+                logger.debug(f"Error! Hash value {hash_value} not in DB (algorithm: {algorithm})")
+                raise HashValueNotInDBError
+            
+            return Module(
+                os=OS(row["id"], row["name"], row["version"]),
+                id=row["module_id"],
+                file_version=row["file_version"],
+                original_filename=row["original_filename"],
+                internal_filename=row["internal_filename"],
+                product_name=row["product_filename"],
+                company_name=row["company_name"],
+                legal_copyright=row["legal_copyright"],
+                classification=row["classification"],
+                size=row["size"],
+                base_address=row["base_address"]
+            )
+    
+    
     def get_organized_modules(self, algorithm: HashAlgorithm = TLSHHashAlgorithm) -> dict:
         result = {}
 
