@@ -60,7 +60,7 @@ class WinPageHashNode(HashNode):
 
     @classmethod
     def create_node_from_DB(cls, db_manager, hash_id, hash_algorithm, lazy=True):
-        new_node = WinPageHashNode(hash_id, hash_algorithm, None, db_manager)
+        new_node = WinPageHashNode(hash_id, hash_algorithm, None)
         if not lazy:
             new_node._module # Force load module from database
         return new_node
