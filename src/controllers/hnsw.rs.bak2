@@ -1,0 +1,246 @@
+use crate::datalayer::algorithms::DistanceAlgorithm;
+use crate::datalayer::algorithms::NormalDistance;
+use crate::datalayer::features::NumberFeature;
+use crate::datalayer::nodes::Node;
+use crate::datalayer::features::FeatureType;
+use rand::rngs::StdRng;
+use rand::{RngCore, SeedableRng};
+use std::collections::HashSet;
+use std::time::Duration;
+use priority_queue::PriorityQueue;
+use std::cmp::Reverse;
+use std::cell::Cell; // Remove later
+use std::time::Instant;
+
+
+pub struct Hnsw<D, F> {
+    distance_algorithm: D,
+    features: Vec<F>,
+    layers: Vec<Vec<Node>>,
+    prng: StdRng,
+    m: usize,
+    m0: usize,
+    ef: usize,
+    pub candidates_explored: Cell<usize>, // Remove later
+    pub neighbors_explored: Cell<usize>,
+
+}
+
+impl<D, F> Hnsw<D, F> where 
+    D: DistanceAlgorithm<F>,
+    F: FeatureType + Clone
+{
+    pub fn new(distance_algorithm: D, m: usize, m0: usize, ef: usize) -> Self {
+        Self {
+            distance_algorithm: distance_algorithm,
+            features: vec![],
+            layers: vec![vec![]],
+            prng: StdRng::from_seed([0u8; 32]), // Deterministic seed
+            m,
+            m0,
+            ef,
+            candidates_explored: Cell::new(0),
+            neighbors_explored: Cell::new(0)
+
+        }
+    }
+
+    pub fn insert(&mut self, feature: F) -> bool { // TODO: Change return
+        let new_level = self.random_level();
+        //println!("[I0] Inserting new feature {:?}. New level to insert is: {}", feature.get_id(), new_level);
+        self.features.push(feature.clone());
+
+        if self.layers[0].is_empty() {
+            // First node we are inserting
+            // Add the zero node unconditionally. (LAYER 0)
+            self.layers[0].push(Node {
+                feature_index: 0,
+                next_node: 0,
+                neighbors: PriorityQueue::new(), 
+            });
+            
+
+            // Add the node in higher layers (in case needed) (LAYER 1+)
+            while self.layers.len() < new_level {
+                let new_node = Node {
+                    feature_index: 0,
+                    next_node: 0,
+                    neighbors: PriorityQueue::new(),
+                };
+                self.layers.push(vec![new_node]);
+            }
+           // println!("-----------");
+            return true;
+        }
+
+        let mut ef = if new_level >= self.layers.len() { self.ef } else { 1 }; // Check if mut is needed here.
+        let mut visited_neighbors: HashSet<usize> = HashSet::new(); // Maybe just store the node index? For better perfomance: WE ARE USING POINTERS!!
+
+
+        let mut enter_point = 0; 
+        let mut score = self.distance_algorithm.calculate_distance(self.features[self.layers.last().unwrap()[0].feature_index].get_id(), feature.get_id()); // We need to move this
+        // From existing layer level to the level we're going to insert. (Normal search until insertion level)
+
+        for layer_ix in (new_level+1..=self.layers.len() - 1).rev() {
+            //println!("[I1] Descending to the first insertion level. Current level is: {}", layer_ix);
+            let knn_neighbors = self.search_layer_knn(&feature, (enter_point, score), ef, layer_ix, &mut visited_neighbors);
+            let (nearest_neighbor_index, nearest_neighbor_distance) = knn_neighbors.iter().min_by_key(|(_, priority)| *priority).unwrap(); // Get the last element of the priority queue (inefficient)
+            let next_node_id = self.layers[layer_ix][*nearest_neighbor_index].next_node; // From the nearest neighbor found, we go to the same node on the next layer
+            enter_point = next_node_id;
+            score = *nearest_neighbor_distance;
+            //println!("[I2] Enter point for the next layer is: {}", enter_point);
+            ef = if layer_ix == new_level + 1 { self.ef } else { 1 };
+        }
+
+        // Decide which layers we are inserting a node (just from new_level to 0)
+        let max_layer_to_insert = core::cmp::min(new_level, self.layers.len());
+        let mut layers_to_insert: Vec<usize> = (1..max_layer_to_insert).rev().collect();
+        layers_to_insert.push(0); // We will always want to insert at layer 0
+        
+        // From new_level to layer 0
+        for layer_ix in layers_to_insert {
+            let knn_neighbors = self.search_layer_knn(&feature, (enter_point, score), self.ef, layer_ix as usize, &mut visited_neighbors);
+            //println!("[I3] Inserting at layer: {}. Numbers of neighbors it will have: {:?}", layer_ix, knn_neighbors.len());
+            self.add_node(&knn_neighbors, layer_ix as usize);
+            let (nearest_neighbor_index, nearest_neighbor_distance) = knn_neighbors.iter().min_by_key(|(_, priority)| *priority).unwrap();
+            let next_node_id = self.layers[layer_ix as usize][*nearest_neighbor_index].next_node; // From the nearest neighbor found, we go to the same node on the next layer
+            enter_point = next_node_id;
+            score = *nearest_neighbor_distance;
+           // println!("[I4] Enter point for the next layer is: {}", enter_point);
+        }
+
+        // Create new layers up to new_level
+        while self.layers.len() <= new_level {
+            let node = Node {
+                next_node: self.layers.last().unwrap().len() - 1,
+                feature_index: self.features.len() - 1,
+                neighbors: PriorityQueue::new(),
+            };
+            self.layers.push(vec![node]);
+        }
+
+        //println!("-----------");
+
+
+        return true;
+    }
+
+    fn add_node(&mut self, new_neighbors: &PriorityQueue<usize, u32>, layer_idx: usize) {
+        let new_node_index = self.layers[layer_idx].len();
+
+        let mut new_neighbors_sliced = new_neighbors.clone();
+        let n_neighbors = if layer_idx == 0 { self.m0 } else { self.m }; // Fixed: should be self.m for upper layers
+
+        while new_neighbors_sliced.len() > n_neighbors {
+            new_neighbors_sliced.pop();
+        }
+
+        // Clone the data before moving it into the struct
+        let neighbors_for_node = new_neighbors_sliced.clone();
+        
+        let new_node = Node {
+            feature_index: self.features.len() - 1,
+            next_node: if layer_idx == 0 {
+                0
+            } else {
+                self.layers[layer_idx - 1].len() 
+            },
+            neighbors: neighbors_for_node, // Move the clone
+        };
+
+        self.layers[layer_idx].push(new_node);
+        self.connect_neighbors(new_node_index, &new_neighbors_sliced, layer_idx); // Use original
+    }
+
+
+    fn connect_neighbors(&mut self, new_node_index: usize, new_neighbors: &PriorityQueue<usize, u32>, layer_idx: usize) {
+        let max_neighbors = if layer_idx == 0 { self.m0 } else { self.m };
+
+        for (new_neighbor, score) in new_neighbors {
+            let current_feature = &self.features[self.layers[layer_idx][*new_neighbor].feature_index];
+            let  current_neighbors = &mut self.layers[layer_idx][*new_neighbor].neighbors;
+            if current_neighbors.len() < max_neighbors {
+                current_neighbors.push(new_node_index, *score);
+            } else { // Neighbor list is full, need to replace it. WARNING: This may cause non-bidirectional connections (expected on HNSW)
+                let (_, worst_score) = current_neighbors.peek().unwrap();
+                let new_score = self.distance_algorithm.calculate_distance(self.features.last().unwrap().get_id(), current_feature.get_id());
+
+                if new_score < *worst_score {
+                    current_neighbors.pop();
+                    current_neighbors.push(new_node_index, new_score);
+                }
+            }
+        }        
+    }
+
+    fn search_layer_knn(&self, feature: &F, (enter_point, score): (usize, u32), ef: usize, layer_idx: usize, visited_neighbors: &mut HashSet<usize>) -> PriorityQueue<usize, u32> {
+        let time_start = Instant::now();
+        let mut candidates: PriorityQueue<&Node, Reverse<u32>> = PriorityQueue::new();
+        candidates.push(&self.layers[layer_idx][enter_point], Reverse(0));
+        let mut currently_found_nearest_neighbors: PriorityQueue<usize, u32> = PriorityQueue::new();
+        currently_found_nearest_neighbors.push(enter_point, score); // MANDATORY: currently_found_nearest_neighbors.push(what we found in the previus layer)
+        //let mut currently_found_nearest_neighbors_len = 1;
+        let mut visited_insert_end = Duration::new(0, 0);
+        let mut big_end = Duration::new(0, 0);
+
+
+        //println!("[S0] Let's start the greedy search with enter poit {} at layer {}. Called with ef: {}.", enter_point, layer_idx, ef);
+        // WARNING: We may need to include on the visited list the nodes visited on previus layers. We're already doing this.
+        //println!("[S1]  EP {}",  enter_point);
+
+        while let Some((candidate, _)) = candidates.pop() { // Get the first candiadte
+            self.candidates_explored.set(self.candidates_explored.get() + 1);
+            visited_neighbors.insert(candidate.feature_index); // Extra step, not in original implementation. TODO: Maybe NOT NEEDED?
+            
+            for (neighbor, _) in &candidate.neighbors { // Iterate over all neighbors of the candidate to perform greedy search
+                self.neighbors_explored.set(self.neighbors_explored.get() + 1);
+                
+                let neighbor_node: &Node = &self.layers[layer_idx][*neighbor];
+                let visited_insert_start = Instant::now();
+                let inserted = visited_neighbors.insert(neighbor_node.feature_index);
+                visited_insert_end = visited_insert_start.elapsed();
+                if inserted { // Continue only if it's NOT already visited.
+
+                    let score = self.distance_algorithm.calculate_distance(self.features[neighbor_node.feature_index].get_id(), feature.get_id());
+                    //println!("[S2] Evaluating neighbor {} ({:?}) at layer {}. Score = {}", neighbor, self.features[self.layers[layer_idx][*neighbor].feature_index].get_id(), layer_idx, score);
+                    let big_start = Instant::now();
+                    if currently_found_nearest_neighbors.len() < ef { // We have space inside W, just push it.
+                        currently_found_nearest_neighbors.push(*neighbor, score);
+                        candidates.push(neighbor_node, Reverse(score));
+                        //println!("[S3.1] We have enough space in W, so just add it! W is now of len: {}", currently_found_nearest_neighbors.len());
+                    } else {
+                        //println!("[S3.2] List is full!: {}", currently_found_nearest_neighbors.len());
+                        if let Some((_, &worst_distance)) = currently_found_nearest_neighbors.peek() {
+                            // Check if the worst element we have in W is worse than New Node < --- > Neighbor Node.
+                            if self.distance_algorithm.candidate_better_than_current(&worst_distance, feature.get_id(), self.features[neighbor_node.feature_index].get_id()) {
+                                //println!("[S3.2.1] But this candidate is better than current, so replace it! {}", currently_found_nearest_neighbors.len());
+
+                                // In that case, replace the element.
+                                currently_found_nearest_neighbors.pop();
+                                currently_found_nearest_neighbors.push(*neighbor, score);
+                                candidates.push(neighbor_node, Reverse(score));
+                            }
+                        }
+                    }
+                    big_end =  big_start.elapsed();
+                    //println!("Big part time: {:?}. Current ep: {}. Current layer: {}. CNNF len: {}", big_end, ef, layer_idx, currently_found_nearest_neighbors.len());
+                }
+            }
+        }
+        println!("[S6] Search time: {:?}.  VI: {:?}. Candidates explored: {:?} / Neighbors explored: {:?}", time_start.elapsed(), visited_insert_end, self.candidates_explored, self.neighbors_explored);
+
+        currently_found_nearest_neighbors
+
+    }
+
+    fn random_level(&mut self) -> usize {
+        let uniform: f64 = self.prng.next_u64() as f64 / core::u64::MAX as f64;
+        (-libm::log(uniform) * libm::log(self.m as f64).recip()) as usize
+    }
+}
+
+impl Default for Hnsw<NormalDistance, NumberFeature> {
+    fn default() -> Self {
+        Self::new(NormalDistance, 12, 24, 400)
+    }
+}

@@ -1,0 +1,25 @@
+[package]
+name = "apotheosis2"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+rand_pcg = "0.3.1"
+rand_core = "0.6.3"
+rand = { version = "0.8", features = ["std_rng"] }
+libm = "0.2.1"
+priority-queue = "2.5"
+tlsh2 = { version = "0.4", features = ["diff"] }
+hex = "0.4.3"
+serde = "1.0.219"
+serde_json = "1.0.143"
+
+
+[profile.dev]
+opt-level = 3
+
+
+[profile.release]
+codegen-units = 1
+# This is here so we can generate flamegraphs.
+debug = true
