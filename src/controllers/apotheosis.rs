@@ -1,25 +1,31 @@
-
 // AUTHORS: Daniel Huici and Ricardo J. Rodríguez
 // Copyright (c) 2025
 // GPLv3 License
-// reverseame@unizar.es
+// [reverseame@unizar.es](mailto:reverseame@unizar.es)
 
 use radix_tree::{Node, Radix};
 use crate::controllers::hnsw::Hnsw;
-use crate::datalayer::algorithms::{TLSHDistance};
-use crate::datalayer::features::{TlshHashFeature};
+use crate::datalayer::algorithms::DistanceAlgorithm;
+use crate::datalayer::features::FeatureType;
 
-pub struct Apotheosis<const M: usize, const M0: usize> {
-    pub hnsw: Hnsw<TLSHDistance, TlshHashFeature, M, M0>,
+pub struct Apotheosis<F, D, const M: usize, const M0: usize> 
+where 
+    F: FeatureType,
+    D: DistanceAlgorithm<F>,
+{
+    pub hnsw: Hnsw<D, F, M, M0>,
     pub radix: Node<char, Option<usize>>,
-
 }
 
-impl<const M: usize, const M0: usize> Apotheosis<M, M0> { 
-    pub fn new() -> Self {
+impl<F, D, const M: usize, const M0: usize> Apotheosis<F, D, M, M0> 
+where 
+    F: FeatureType,
+    D: DistanceAlgorithm<F>
+{
+    pub fn new(distance_algorithm: D) -> Self {
         Self {
-            hnsw: Hnsw::new(TLSHDistance, 400),
-            radix: Node::<char, Option<usize>>::new("", None),
+            hnsw: Hnsw::new(distance_algorithm, 400),
+            radix: Node::<char, Option<usize>>::new("F::RadixKeyType::default()", None),
         }
     }
 
@@ -31,11 +37,11 @@ impl<const M: usize, const M0: usize> Apotheosis<M, M0> {
     /// # Returns
     /// * `true` if the feature was successfully inserted
     /// * `false` if the feature's key already exists in the model
-    pub fn insert(&mut self, feature: TlshHashFeature) -> bool {
-        let key_to_find = feature.string.clone();
-        let key_to_insert = feature.string.clone();
+    pub fn insert(&mut self, feature: F) -> bool {
+        let key_to_find = feature.get_radix_key().clone();
+        let key_to_insert = feature.get_radix_key().clone();
 
-        if self.radix.find(key_to_find).is_some() {
+        if self.radix.find(key_to_find.clone()).is_some() {
             return false;
         }
         
@@ -50,12 +56,12 @@ impl<const M: usize, const M0: usize> Apotheosis<M, M0> {
     /// - If not found, performs an HNSW search using the provided feature.
     /// 
     /// # Parameters
-    /// * `key` - The string key to search for in the radix tree
-    /// * `feature` - The TlshHashFeature to use for HNSW search if key not found in radix
+    /// * `key` - The key to search for in the radix tree
+    /// * `k` - Number of neighbors to return
     /// 
     /// # Returns
-    /// * `Vec<(u32, &TlshHashFeature)>` - List of tuples, being the first element the distance and the second the node's feature
-    pub fn search(&self, key: String, k: usize) -> Vec<(u32, &TlshHashFeature)> {
+    /// * `Vec<(u32, &F)>` - List of tuples with distance and feature reference
+    pub fn search(&self, key: String, k: usize) -> Vec<(u32, &F)> {
         if let Some(radix_node) = self.radix.find(key.clone()) {
             if let Some(node_index) = radix_node.data {
                 return self.hnsw.get_zero_layer_node(node_index.unwrap());
@@ -63,10 +69,10 @@ impl<const M: usize, const M0: usize> Apotheosis<M, M0> {
                 return vec![];
             }
         } else {
-            let hnsw_results: Vec<(u32, &TlshHashFeature)>  = self.hnsw.knn_search(&TlshHashFeature::new(key), 24, k); // TODO: Make ef configurable?
+            let hnsw_results: Vec<(u32, &F)> = self.hnsw.knn_search(&F::create(key), 24, k); // TODO: Make ef configurable?
             return hnsw_results;
         }
     }
 
-}
 
+}

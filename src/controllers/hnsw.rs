@@ -27,13 +27,13 @@ where
 {
     pub fn new(distance_algorithm: D, ef: usize) -> Self {
         Self {
-            distance_algorithm: distance_algorithm,
+            distance_algorithm: distance_algorithm, // Not needed as a parameter? Just call D:: as static
             features: vec![],
             upper_layers: vec![],
             zero_layer: vec![],
             prng: StdRng::seed_from_u64(42), // Deterministic seed
             ef,
-            candidates_explored: Cell::new(0),
+            candidates_explored: Cell::new(0), // For debug purposes only
             neighbors_explored: Cell::new(0),
         }
     }

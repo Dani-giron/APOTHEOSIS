@@ -48,17 +48,17 @@ pub fn main() {
     let dataset: Vec<String> = hashes[..1000].to_vec();
     let dataset_copy: Vec<String> = dataset.clone();
     let queries: Vec<String> = hashes[1000000..1010000].to_vec();
-    let mut apotheosis = Apotheosis::<32, 60>::new();
+    let mut apotheosis = Apotheosis::<TlshHashFeature, TLSHDistance, 32, 60>::new(TLSHDistance);
     let creation_start: Instant = Instant::now();
 
     println!("Dataset size: {}, Queries size: {}", dataset.len(), queries.len());
     println!("Starting insertion into HNSW model...");
     for f in dataset_copy {
-        apotheosis.insert(TlshHashFeature::new(f));
+        apotheosis.insert(TlshHashFeature::create(f));
     }
 
     let result = apotheosis.search("T1008100007FFA5C48F0F33EB5AEB455158576FE205AB2CA6D51A4828F24B2B408961F3B".to_string(), 1);
-    println!("Distance: {}, Hash: {}", result[0].0, result[0].1.string);
+    println!("Distance: {}, Hash: {}", result[0].0, result[0].1.radix_key);
     let creation_time: std::time::Duration = creation_start.elapsed();
 
     let mut brute_results: Vec<(u32, &TlshHashFeature)> = Vec::new();
