@@ -8,7 +8,6 @@ use rand::{RngCore, SeedableRng};
 use std::cell::Cell; use std::cmp;
 // Remove later
 use std::collections::HashSet;
-use std::time::Instant;
 
 pub struct Hnsw<D, F, const M: usize, const M0: usize> {
     distance_algorithm: D,
@@ -39,7 +38,7 @@ where
         }
     }
 
-    pub fn insert(&mut self, feature: F) -> bool { // TODO: Change return
+    pub fn insert(&mut self, feature: F) -> usize { // TODO: Change return
         let new_level = self.random_level();
         //println!("[I0] Inserting new feature {:?}. New level to insert is: {}", feature.get_id(), new_level);
         let feature_ref = self.features.len();
@@ -65,8 +64,7 @@ where
                     }
                 ]);
             }
-            //println!("-----------");
-            return true;
+            return feature_ref
         }
 
         let mut ef = if new_level >= self.upper_layers.len() {
@@ -76,7 +74,6 @@ where
         }; // Check if mut is needed here.
 
         let mut visited_neighbors: HashSet<usize> = HashSet::new(); // Maybe just store the node index? For better perfomance: WE ARE USING POINTERS!!
-
 
         let mut enter_point = 0;
         let mut score: u32 = 0;
@@ -139,7 +136,7 @@ where
         //println!("---------------------------------------------------");
         //self.print_layers();
 
-        return true;
+        return feature_ref;
     }
 
     #[inline(always)]
@@ -498,6 +495,22 @@ where
         }
 
         results
+    }
+
+    pub fn get_zero_layer_node(&self, index: usize) -> Vec<(u32, &F)> { // TODO: Rename this function
+        let mut results: Vec<(u32, &F)> = vec![];
+        results.push((0, &self.features[self.zero_layer[index].feature_index]));
+
+        let node = &self.zero_layer[index];
+        let neigbors = node.active_neighbors();
+
+        for neighbor_index in neigbors {
+            let score = self.distance_algorithm.calculate_distance(&self.features[*neighbor_index].get_id(), &self.features[node.feature_index].get_id());
+            results.push((score, &self.features[*neighbor_index]));
+        }
+
+        results
+        
     }
  
 }

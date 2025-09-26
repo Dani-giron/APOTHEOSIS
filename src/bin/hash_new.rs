@@ -1,5 +1,6 @@
+use apotheosis2::controllers::apotheosis::Apotheosis;
 use apotheosis2::datalayer::algorithms::{TLSHDistance};
-use apotheosis2::datalayer::features::{FeatureType, HashFeature};
+use apotheosis2::datalayer::features::{FeatureType, TlshHashFeature};
 use apotheosis2::{controllers::hnsw::Hnsw};
 use std::time::Instant;
 use tlsh2::{TlshDefault};
@@ -14,47 +15,62 @@ fn read_hashes_from_json<P: AsRef<std::path::Path>>(path: P) -> Vec<String> {
     let v: Value = serde_json::from_str(&data).expect("Failed to parse JSON");
     let obj = v.as_object().expect("Expected JSON object at root");
 
-    obj.values()
-        .filter_map(|val| val.as_str().map(|s| s.to_string()))
-        .collect()
+    if let Some(hashes_value) = obj.get("hashes") {
+        if let Some(hashes_array) = hashes_value.as_array() {
+            return hashes_array
+                .iter()
+                .filter_map(|val| val.as_str().map(|s| s.to_string()))
+                .collect();
+        }
+    }
+
+    Vec::new()
 }
 
-fn create_tlsh_objects(hashes: &[String]) -> Vec<HashFeature> {
+/*
+
+fn create_tlsh_objects(hashes: &[String]) -> Vec<TlshHashFeature> {
     hashes.iter()
-        .filter_map(|h| TlshDefault::from_str(h).ok().map(HashFeature::new))
+        .filter_map(|h| TlshDefault::from_str(h).ok().map(TlshHashFeature::new))
         .collect()
 }
+         */
 
 
 // cargo run --bin testing
 pub fn main() {
-    let hashes = read_hashes_from_json("tlsh_hashes.json");
+    let hashes = read_hashes_from_json("output_hashes.json");
     println!("Number of hashes: {:?}", hashes.len());
 
-    let data = create_tlsh_objects(&hashes);
+    //let data = create_tlsh_objects(&hashes);
 
     // Initialize vectors before pushing
-    let dataset: Vec<HashFeature> = data[..92000].to_vec();
-    let dataset_copy: Vec<HashFeature> = dataset.clone();
-    let queries: Vec<HashFeature> = data[92000..93000].to_vec();
-
-    let mut model: Hnsw<TLSHDistance, HashFeature, 12, 24> = Hnsw::new(TLSHDistance, 400);
+    let dataset: Vec<String> = hashes[..1000].to_vec();
+    let dataset_copy: Vec<String> = dataset.clone();
+    let queries: Vec<String> = hashes[1000000..1010000].to_vec();
+    let mut apotheosis = Apotheosis::<32, 60>::new();
     let creation_start: Instant = Instant::now();
 
+    println!("Dataset size: {}, Queries size: {}", dataset.len(), queries.len());
+    println!("Starting insertion into HNSW model...");
     for f in dataset_copy {
-        model.insert(f);
+        apotheosis.insert(TlshHashFeature::new(f));
     }
 
+    let result = apotheosis.search("T1008100007FFA5C48F0F33EB5AEB455158576FE205AB2CA6D51A4828F24B2B408961F3B".to_string(), 1);
+    println!("Distance: {}, Hash: {}", result[0].0, result[0].1.string);
     let creation_time: std::time::Duration = creation_start.elapsed();
 
-    let mut brute_results: Vec<(u32, &HashFeature)> = Vec::new();
-    let mut apo_results: Vec<(u32, &HashFeature)> = Vec::new();
+    let mut brute_results: Vec<(u32, &TlshHashFeature)> = Vec::new();
+    let mut apo_results: Vec<(u32, &TlshHashFeature)> = Vec::new();
 
     let brute_start = Instant::now();
-
+    
+    /* 
+    println!("Starting brute force search...");
     // --- Brute Force Search ---
     for query in queries.iter() {
-        let mut closest: (u32, Option<&HashFeature>) = (u32::MAX, None);
+        let mut closest: (u32, Option<&TlshHashFeature>) = (u32::MAX, None);
 
         for candidate in dataset.iter() {
             let diff = query.id.diff(&candidate.id, true) as u32;
@@ -73,8 +89,10 @@ pub fn main() {
 
     let hnsw_start = Instant::now();
 
+    println!("Starting APOTHEOSIS search...");
+
     for n in &queries {
-        let results: Vec<(u32, &HashFeature)> = model.knn_search(n, 24, 5);
+        let results: Vec<(u32, &TlshHashFeature)> = apotheosis.search(n.to_string(), 42);
         apo_results.push(results[0].clone());
     }
 
@@ -91,4 +109,5 @@ pub fn main() {
     println!("Creation time: {:?}", creation_time);
     println!("Brute force time: {:?}", brute_time);
     println!("HNSW search time: {:?}", hnsw_time);
+    */
 }

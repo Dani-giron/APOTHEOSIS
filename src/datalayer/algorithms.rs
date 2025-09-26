@@ -1,4 +1,4 @@
-use crate::datalayer::features::{FeatureType, NumberFeature, HashFeature};
+use crate::datalayer::features::{FeatureType, HashFeature, NumberFeature, TlshHashFeature};
 use tlsh2::TlshDefault;
 
 
@@ -8,7 +8,7 @@ pub trait DistanceAlgorithm<F>
     F: FeatureType,
 {
 
-    fn calculate_distance(&self, a: &F::IdType, b: &F::IdType) -> u32;
+    fn calculate_distance(&self, a: &F::IdType, b: &F::IdType) -> u32; // TODO: Maybe just &F as parameter? (Entire feature)
 }
 
 pub struct NormalDistance;
@@ -22,7 +22,7 @@ impl DistanceAlgorithm<NumberFeature> for NormalDistance {
 
 #[derive(Clone)]
 pub struct TLSHDistance;
-impl DistanceAlgorithm<HashFeature> for TLSHDistance {
+impl DistanceAlgorithm<TlshHashFeature> for TLSHDistance {
     fn calculate_distance(&self, a: &TlshDefault, b: &TlshDefault) -> u32 {
 
         let diff = a.diff(&b, true);

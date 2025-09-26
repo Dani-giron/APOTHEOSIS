@@ -1,0 +1,72 @@
+
+// AUTHORS: Daniel Huici and Ricardo J. Rodríguez
+// Copyright (c) 2025
+// GPLv3 License
+// reverseame@unizar.es
+
+use radix_tree::{Node, Radix};
+use crate::controllers::hnsw::Hnsw;
+use crate::datalayer::algorithms::{TLSHDistance};
+use crate::datalayer::features::{TlshHashFeature};
+
+pub struct Apotheosis<const M: usize, const M0: usize> {
+    pub hnsw: Hnsw<TLSHDistance, TlshHashFeature, M, M0>,
+    pub radix: Node<char, Option<usize>>,
+
+}
+
+impl<const M: usize, const M0: usize> Apotheosis<M, M0> { 
+    pub fn new() -> Self {
+        Self {
+            hnsw: Hnsw::new(TLSHDistance, 400),
+            radix: Node::<char, Option<usize>>::new("", None),
+        }
+    }
+
+    /// Inserts a feature into Apotheosis Model (radix tree + HNSW).
+    /// 
+    /// # Parameters
+    /// * `feature` - The feature to insert
+    /// 
+    /// # Returns
+    /// * `true` if the feature was successfully inserted
+    /// * `false` if the feature's key already exists in the model
+    pub fn insert(&mut self, feature: TlshHashFeature) -> bool {
+        let key_to_find = feature.string.clone();
+        let key_to_insert = feature.string.clone();
+
+        if self.radix.find(key_to_find).is_some() {
+            return false;
+        }
+        
+        let hnsw_node_index = self.hnsw.insert(feature);
+        self.radix.insert(key_to_insert, Some(hnsw_node_index));
+        
+        true
+    }
+
+    /// Performs a search operation in the Apotheosis Model.
+    /// - First checks the radix tree for the key. If found, retrieves neighbors from HNSW.
+    /// - If not found, performs an HNSW search using the provided feature.
+    /// 
+    /// # Parameters
+    /// * `key` - The string key to search for in the radix tree
+    /// * `feature` - The TlshHashFeature to use for HNSW search if key not found in radix
+    /// 
+    /// # Returns
+    /// * `Vec<(u32, &TlshHashFeature)>` - List of tuples, being the first element the distance and the second the node's feature
+    pub fn search(&self, key: String, k: usize) -> Vec<(u32, &TlshHashFeature)> {
+        if let Some(radix_node) = self.radix.find(key.clone()) {
+            if let Some(node_index) = radix_node.data {
+                return self.hnsw.get_zero_layer_node(node_index.unwrap());
+            } else {
+                return vec![];
+            }
+        } else {
+            let hnsw_results: Vec<(u32, &TlshHashFeature)>  = self.hnsw.knn_search(&TlshHashFeature::new(key), 24, k); // TODO: Make ef configurable?
+            return hnsw_results;
+        }
+    }
+
+}
+

@@ -14,9 +14,16 @@ fn read_hashes_from_json<P: AsRef<std::path::Path>>(path: P) -> Vec<String> {
     let v: Value = serde_json::from_str(&data).expect("Failed to parse JSON");
     let obj = v.as_object().expect("Expected JSON object at root");
 
-    obj.values()
-        .filter_map(|val| val.as_str().map(|s| s.to_string()))
-        .collect()
+    if let Some(hashes_value) = obj.get("hashes") {
+        if let Some(hashes_array) = hashes_value.as_array() {
+            return hashes_array
+                .iter()
+                .filter_map(|val| val.as_str().map(|s| s.to_string()))
+                .collect();
+        }
+    }
+
+    Vec::new()
 }
 
 fn create_tlsh_objects(hashes: &[String]) -> Vec<HashFeature> {
@@ -28,19 +35,20 @@ fn create_tlsh_objects(hashes: &[String]) -> Vec<HashFeature> {
 
 // cargo run --bin testing
 pub fn main() {
-    let hashes = read_hashes_from_json("tlsh_hashes.json");
+    let hashes = read_hashes_from_json("output_hashes.json");
     println!("Number of hashes: {:?}", hashes.len());
 
     let data = create_tlsh_objects(&hashes);
 
     // Initialize vectors before pushing
-    let dataset: Vec<HashFeature> = data[..92000].to_vec();
+    let dataset: Vec<HashFeature> = data[..1000000].to_vec();
     let dataset_copy: Vec<HashFeature> = dataset.clone();
-    let queries: Vec<HashFeature> = data[92000..93000].to_vec();
-
-    let mut model: Hnsw<TLSHDistance, HashFeature, 12, 24> = Hnsw::new(TLSHDistance, 400);
+    let queries: Vec<HashFeature> = data[1000000..1010000].to_vec();
+    let mut model: Hnsw<TLSHDistance, HashFeature, 80, 110> = Hnsw::new(TLSHDistance, 400);
     let creation_start: Instant = Instant::now();
 
+    println!("Dataset size: {}, Queries size: {}", dataset.len(), queries.len());
+    println!("Starting insertion into HNSW model...");
     for f in dataset_copy {
         model.insert(f);
     }
@@ -52,6 +60,8 @@ pub fn main() {
 
     let brute_start = Instant::now();
 
+    
+    println!("Starting brute force search...");
     // --- Brute Force Search ---
     for query in queries.iter() {
         let mut closest: (u32, Option<&HashFeature>) = (u32::MAX, None);
@@ -73,8 +83,10 @@ pub fn main() {
 
     let hnsw_start = Instant::now();
 
+    println!("Starting APOTHEOSIS search...");
+
     for n in &queries {
-        let results: Vec<(u32, &HashFeature)> = model.knn_search(n, 24, 5);
+        let results: Vec<(u32, &HashFeature)> = model.knn_search(n, 42, 5);
         apo_results.push(results[0].clone());
     }
 

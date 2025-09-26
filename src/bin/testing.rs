@@ -1,6 +1,6 @@
 use apotheosis2::datalayer::algorithms::NormalDistance;
 use apotheosis2::{controllers::hnsw::Hnsw, datalayer::features::NumberFeature};
-use rand::{random, Rng, SeedableRng};
+use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 use std::u32::MAX;
 use std::time::Instant;

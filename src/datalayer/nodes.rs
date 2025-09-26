@@ -4,7 +4,7 @@ use std::hash::{Hash, Hasher};
 pub struct Node<const N: usize> {
     pub next_node: usize,
     pub feature_index: usize,
-    pub neighbors: [usize; N], 
+    pub neighbors: [usize; N], // TODO: Save the distances aswell?
     pub neighbor_count: usize,  
 }
 
