@@ -22,9 +22,9 @@ where
     F: FeatureType,
     D: DistanceAlgorithm<F>
 {
-    pub fn new(distance_algorithm: D) -> Self {
+    pub fn new() -> Self {
         Self {
-            hnsw: Hnsw::new(distance_algorithm, 400),
+            hnsw: Hnsw::new(400),
             radix: Node::<char, Option<usize>>::new("F::RadixKeyType::default()", None),
         }
     }

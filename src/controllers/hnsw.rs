@@ -8,9 +8,9 @@ use rand::{RngCore, SeedableRng};
 use std::cell::Cell; use std::cmp;
 // Remove later
 use std::collections::HashSet;
+use std::marker::PhantomData;
 
 pub struct Hnsw<D, F, const M: usize, const M0: usize> {
-    distance_algorithm: D,
     features: Vec<F>,
     upper_layers: Vec<Vec<Node<M>>>,
     zero_layer: Vec<Node<M0>>,
@@ -18,6 +18,7 @@ pub struct Hnsw<D, F, const M: usize, const M0: usize> {
     ef: usize,
     pub candidates_explored: Cell<usize>, // Remove later
     pub neighbors_explored: Cell<usize>,
+    _phantom: PhantomData<D>, // Add this line
 }
 
 impl<D, F, const M: usize, const M0: usize> Hnsw<D, F, M, M0>
@@ -25,9 +26,8 @@ where
     D: DistanceAlgorithm<F>,
     F: FeatureType,
 {
-    pub fn new(distance_algorithm: D, ef: usize) -> Self {
+    pub fn new(ef: usize) -> Self {
         Self {
-            distance_algorithm: distance_algorithm, // Not needed as a parameter? Just call D:: as static
             features: vec![],
             upper_layers: vec![],
             zero_layer: vec![],
@@ -35,6 +35,7 @@ where
             ef,
             candidates_explored: Cell::new(0), // For debug purposes only
             neighbors_explored: Cell::new(0),
+            _phantom: PhantomData, // Add this line
         }
     }
 
@@ -78,7 +79,7 @@ where
         let mut enter_point = 0;
         let mut score: u32 = 0;
         if self.upper_layers.is_empty() {
-            score = self.distance_algorithm.calculate_distance(
+            score = D::calculate_distance(
                 self.features[0].get_id(),
                 self.features[feature_ref].get_id(),
             );
@@ -86,7 +87,7 @@ where
         } else {
             let feature_index = self.upper_layers.last().unwrap().first().unwrap().feature_index;
             visited_neighbors.insert(feature_index);
-            score = self.distance_algorithm.calculate_distance(
+            score = D::calculate_distance(
                 self.features[self.upper_layers.last().unwrap().first().unwrap().feature_index].get_id(),
                 self.features[feature_ref].get_id(),
 
@@ -222,7 +223,7 @@ where
 
             } else {
                 // Calculate distances using immutable references
-                let new_distance = self.distance_algorithm.calculate_distance(
+                let new_distance = D::calculate_distance(
                     self.features[*neighbor_idx].get_id(),
                     self.features[new_node_index].get_id(),
                 );
@@ -235,7 +236,7 @@ where
                         if neighbor == usize::MAX {
                             None
                         } else {
-                            let distance = self.distance_algorithm.calculate_distance(
+                            let distance = D::calculate_distance(
                                 self.features[neighbor].get_id(),
                                 self.features[*neighbor_idx].get_id(),
                             );
@@ -266,7 +267,7 @@ where
                 self.upper_layers[layer_idx][*neighbor_idx].neighbor_count += 1;
             } else {
                 // Calculate distances using immutable references
-                let new_distance = self.distance_algorithm.calculate_distance(
+                let new_distance = D::calculate_distance(
                     self.features[self.upper_layers[layer_idx][*neighbor_idx].feature_index].get_id(),
                     self.features[self.upper_layers[layer_idx][new_node_index].feature_index].get_id(),
                 );
@@ -279,7 +280,7 @@ where
                         if neighbor == usize::MAX { // Likely not needed
                             None
                         } else {
-                            let distance = self.distance_algorithm.calculate_distance(
+                            let distance = D::calculate_distance(
                                 self.features[self.upper_layers[layer_idx][neighbor].feature_index].get_id(),
                                 self.features[self.upper_layers[layer_idx][*neighbor_idx].feature_index].get_id(),
                             );
@@ -320,7 +321,7 @@ where
 
                 
                 if visited_neighbors.insert(neighbor_feature_index) {
-                    let score = self.distance_algorithm.calculate_distance(
+                    let score = D::calculate_distance(
                         self.features[neighbor_feature_index].get_id(),
                         feature.get_id(),
                     );
@@ -361,7 +362,7 @@ where
               //  println!("[S2] Exploring neighbor: {:?}", neighbor);
                 
                 if visited_neighbors.insert(neighbor_feature_index) {
-                    let score = self.distance_algorithm.calculate_distance(
+                    let score = D::calculate_distance(
                         self.features[neighbor_feature_index].get_id(),
                         feature.get_id(),
                     );
@@ -405,7 +406,7 @@ where
                 
                 if visited_neighbors.insert(neighbor_feature_index) {
                     //let compare_start = Instant::now();
-                    let score = self.distance_algorithm.calculate_distance(
+                    let score = D::calculate_distance(
                         self.features[neighbor_feature_index].get_id(),
                         feature.get_id(),
                     );
@@ -472,7 +473,7 @@ where
     pub fn knn_search(&self, feature: &F, ef: usize, k: usize) -> Vec<(u32, &F)> {
         let mut visited_neighbors: HashSet<usize> = HashSet::new();
         let mut enter_point = 0;
-        let mut score = self.distance_algorithm.calculate_distance(
+        let mut score = D::calculate_distance(
             self.features[self.upper_layers.last().unwrap()[0].feature_index].get_id(),
             feature.get_id(),
         ); 
@@ -505,7 +506,7 @@ where
         let neigbors = node.active_neighbors();
 
         for neighbor_index in neigbors {
-            let score = self.distance_algorithm.calculate_distance(&self.features[*neighbor_index].get_id(), &self.features[node.feature_index].get_id());
+            let score = D::calculate_distance(&self.features[*neighbor_index].get_id(), &self.features[node.feature_index].get_id());
             results.push((score, &self.features[*neighbor_index]));
         }
 
@@ -517,7 +518,7 @@ where
 
 impl<const M: usize, const M0: usize> Default for Hnsw<NormalDistance, NumberFeature, M, M0> {
     fn default() -> Self {
-        Self::new(NormalDistance, 400)
+        Self::new( 400)
     }
     
 }

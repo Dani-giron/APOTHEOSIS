@@ -1,10 +1,10 @@
 use apotheosis2::controllers::apotheosis::Apotheosis;
 use apotheosis2::datalayer::algorithms::{TLSHDistance};
 use apotheosis2::datalayer::features::{FeatureType, TlshHashFeature};
-use apotheosis2::{controllers::hnsw::Hnsw};
+use tlsh2::TlshDefault;
+use std::str::FromStr;
 use std::time::Instant;
-use tlsh2::{TlshDefault};
-use std::str::{FromStr};
+
 
 use serde_json::Value;
 use std::fs;
@@ -27,15 +27,16 @@ fn read_hashes_from_json<P: AsRef<std::path::Path>>(path: P) -> Vec<String> {
     Vec::new()
 }
 
-/*
-
+/* 
 fn create_tlsh_objects(hashes: &[String]) -> Vec<TlshHashFeature> {
     hashes.iter()
         .filter_map(|h| TlshDefault::from_str(h).ok().map(TlshHashFeature::new))
         .collect()
-}
-         */
+}*/
 
+fn create_tlsh_object(hash: String) -> TlshDefault {
+    TlshDefault::from_str(&hash).unwrap()
+}
 
 // cargo run --bin testing
 pub fn main() {
@@ -45,10 +46,10 @@ pub fn main() {
     //let data = create_tlsh_objects(&hashes);
 
     // Initialize vectors before pushing
-    let dataset: Vec<String> = hashes[..1000].to_vec();
+    let dataset: Vec<String> = hashes[..10000].to_vec();
     let dataset_copy: Vec<String> = dataset.clone();
-    let queries: Vec<String> = hashes[1000000..1010000].to_vec();
-    let mut apotheosis = Apotheosis::<TlshHashFeature, TLSHDistance, 32, 60>::new(TLSHDistance);
+    let queries: Vec<String> = hashes[1000000..1000100].to_vec();
+    let mut apotheosis = Apotheosis::<TlshHashFeature, TLSHDistance, 32, 60>::new();
     let creation_start: Instant = Instant::now();
 
     println!("Dataset size: {}, Queries size: {}", dataset.len(), queries.len());
@@ -61,27 +62,30 @@ pub fn main() {
     println!("Distance: {}, Hash: {}", result[0].0, result[0].1.radix_key);
     let creation_time: std::time::Duration = creation_start.elapsed();
 
-    let mut brute_results: Vec<(u32, &TlshHashFeature)> = Vec::new();
+    let mut brute_results: Vec<(u32, TlshDefault)> = Vec::new();
     let mut apo_results: Vec<(u32, &TlshHashFeature)> = Vec::new();
 
     let brute_start = Instant::now();
     
-    /* 
+    
     println!("Starting brute force search...");
     // --- Brute Force Search ---
     for query in queries.iter() {
-        let mut closest: (u32, Option<&TlshHashFeature>) = (u32::MAX, None);
-
+        let mut closest: (u32, Option<&String>) = (u32::MAX, None);
+        let tlsh_query = create_tlsh_object(query.to_string());
         for candidate in dataset.iter() {
-            let diff = query.id.diff(&candidate.id, true) as u32;
+            let tlsh_candidate = create_tlsh_object(candidate.to_string());
+
+            let diff = tlsh_query.diff(&tlsh_candidate, true) as u32;
             if diff < closest.0 {
                 closest.0 = diff;
-                closest.1 = Some(candidate);
+                closest.1 = Some(&candidate);
             }
         }
 
         if let Some(hash) = closest.1 {
-            brute_results.push((closest.0, hash));
+            let obj = create_tlsh_object(hash.to_string());
+            brute_results.push((closest.0, obj));
         }
     }
 
@@ -100,7 +104,7 @@ pub fn main() {
 
     let mut matches = 0;
     for i in 0..apo_results.len() {
-        if apo_results[i].0 == brute_results[i].0 && apo_results[i].1.get_id().hash() == brute_results[i].1.get_id().hash() {
+        if apo_results[i].0 == brute_results[i].0 && apo_results[i].1.get_id().hash() == brute_results[i].1.hash() {
             matches += 1;
         }
     }
@@ -109,5 +113,5 @@ pub fn main() {
     println!("Creation time: {:?}", creation_time);
     println!("Brute force time: {:?}", brute_time);
     println!("HNSW search time: {:?}", hnsw_time);
-    */
+    
 }
