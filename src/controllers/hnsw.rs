@@ -204,99 +204,59 @@ where
     }
 
     fn connect_neighbors_zero(&mut self, new_node_index: usize, new_neighbors: &Vec<(usize, u32)>) {
-        //println!("[C0] New neighbors for {} are {:?}", new_node_index, new_neighbors);
-
-        for (neighbor_idx, _) in new_neighbors {
-            // PHASE 1: Read operations using immutable slice
-            let current_neighbors = &self.zero_layer[*neighbor_idx].neighbors;
-            let empty_slot = current_neighbors.partition_point(|&neighbor| neighbor != usize::MAX);
-
-            if empty_slot < M0 {
-                // PHASE 2: Direct mutable access (separate from immutable slice)
-                self.zero_layer[*neighbor_idx].neighbors[empty_slot] = new_node_index;
-                self.zero_layer[*neighbor_idx].neighbor_count += 1;
-
-            } else {
-                // Calculate distances using immutable references
-                let new_distance = D::calculate_distance(
-                    self.features[*neighbor_idx].get_id(),
-                    self.features[new_node_index].get_id(),
-                );
-
-                // Find worst neighbor using the immutable slice
-                let (worst_ix, worst_distance) = current_neighbors
+        for &(neighbor_idx, new_distance) in new_neighbors {
+            let neighbor_node = &mut self.zero_layer[neighbor_idx];
+            
+            if neighbor_node.neighbor_count < M0 { // There's an empty slot on the neighbor list. Add it there
+                let slot = neighbor_node.neighbor_count;
+                neighbor_node.neighbors[slot] = new_node_index;
+                neighbor_node.neighbor_distances[slot] = new_distance;
+                neighbor_node.neighbor_count += 1;
+            } else { // Neighbor list is full - find worst neighbor using stored distances
+                let (worst_ix, worst_distance) = neighbor_node
+                    .active_distances() 
                     .iter()
                     .enumerate()
-                    .filter_map(|(ix, &neighbor)| {
-                        if neighbor == usize::MAX {
-                            None
-                        } else {
-                            let distance = D::calculate_distance(
-                                self.features[neighbor].get_id(),
-                                self.features[*neighbor_idx].get_id(),
-                            );
-                            Some((ix, distance))
-                        }
-                    })
-                    .max_by_key(|&(_, distance)| distance)
+                    .max_by_key(|&(_, &distance)| distance)
                     .unwrap();
-
-                // PHASE 2: Direct mutable access (after all reads are done)
-                if new_distance < worst_distance {
-                    self.zero_layer[*neighbor_idx].neighbors[worst_ix] = new_node_index;
+                
+                if new_distance < *worst_distance {
+                    neighbor_node.neighbors[worst_ix] = new_node_index;
+                    neighbor_node.neighbor_distances[worst_ix] = new_distance;
                 }
             }
         }
     }
 
     fn connect_neighbors(&mut self, new_node_index: usize, new_neighbors: &Vec<(usize, u32)>, layer_idx: usize) {
-        for (neighbor_idx, _) in new_neighbors {
-            //println!("[CN] Trying to connect {} with {}", new_node_index, neighbor_idx);
-            // PHASE 1: Read operations using immutable slice
-            let current_neighbors = &self.upper_layers[layer_idx][*neighbor_idx].neighbors;
-            let empty_slot = current_neighbors.partition_point(|&neighbor| neighbor != usize::MAX);
-
-            if empty_slot < M {
-                // PHASE 2: Direct mutable access (separate from immutable slice)
-                self.upper_layers[layer_idx][*neighbor_idx].neighbors[empty_slot] = new_node_index;
-                self.upper_layers[layer_idx][*neighbor_idx].neighbor_count += 1;
+        
+        for &(neighbor_idx, new_distance) in new_neighbors {
+            let neighbor_node = &mut self.upper_layers[layer_idx][neighbor_idx];
+            
+            if neighbor_node.neighbor_count < M {
+                // Simple case: add to empty slot
+                let slot = neighbor_node.neighbor_count;
+                neighbor_node.neighbors[slot] = new_node_index;
+                neighbor_node.neighbor_distances[slot] = new_distance;
+                neighbor_node.neighbor_count += 1;
             } else {
-                // Calculate distances using immutable references
-                let new_distance = D::calculate_distance(
-                    self.features[self.upper_layers[layer_idx][*neighbor_idx].feature_index].get_id(),
-                    self.features[self.upper_layers[layer_idx][new_node_index].feature_index].get_id(),
-                );
-
-                // Find worst neighbor using the immutable slice
-                let (worst_ix, worst_distance) = current_neighbors
+                // Node is full - find worst neighbor using stored distances
+                let (worst_ix, worst_distance) = neighbor_node
+                    .active_distances() 
                     .iter()
                     .enumerate()
-                    .filter_map(|(ix, &neighbor)| {
-                        if neighbor == usize::MAX { // Likely not needed
-                            None
-                        } else {
-                            let distance = D::calculate_distance(
-                                self.features[self.upper_layers[layer_idx][neighbor].feature_index].get_id(),
-                                self.features[self.upper_layers[layer_idx][*neighbor_idx].feature_index].get_id(),
-                            );
-                          //  println!("[C1] Source: {}. Neighbor {} has distance {}", *neighbor_idx, neighbor, distance);
-                            Some((ix, distance))
-                        }
-                    })
-                    .min_by_key(|&(_, distance)| core::cmp::Reverse(distance))
+                    .max_by_key(|&(_, &distance)| distance) 
                     .unwrap();
-
-               // println!("[C2] Worst neighbor is {} with distance {} | New distance is: {} | Current neighbors are: {:?}", worst_ix, worst_distance, new_distance, current_neighbors);
-
-                // PHASE 2: Direct mutable access (after all reads are done)
-                if new_distance < worst_distance {
-                    self.upper_layers[layer_idx][*neighbor_idx].neighbors[worst_ix] = new_node_index;
-                  //  println!("[C3] Replacing worst neighbor {} with new node {} | New list is {:?}", worst_ix, new_node_index, self.upper_layers[layer_idx][*neighbor_idx].neighbors);
-
+                
+                // Replace if new neighbor is better (shorter distance)
+                if new_distance < *worst_distance {
+                    neighbor_node.neighbors[worst_ix] = new_node_index;
+                    neighbor_node.neighbor_distances[worst_ix] = new_distance; 
                 }
             }
         }
     }
+
 
     /* 
     fn search_layer_knn(&self, feature: &F, (enter_point, score): (usize, u32), ef: usize, layer_idx: usize, visited_neighbors: &mut HashSet<usize>) -> Vec<(usize, u32)> {

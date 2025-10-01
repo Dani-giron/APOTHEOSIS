@@ -23,6 +23,10 @@ impl<const N: usize> Node<N> {
     pub fn active_neighbors(&self) -> &[usize] {
         &self.neighbors[..self.neighbor_count]
     }
+
+    pub fn active_distances(&self) -> &[u32] {
+        &self.neighbor_distances[..self.neighbor_count]
+    }
 }
 
 impl<const N: usize> Hash for Node<N> {
