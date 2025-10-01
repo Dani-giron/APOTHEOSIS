@@ -6,36 +6,43 @@ use crate::datalayer::nodes::Node;
 use rand::rngs::StdRng;
 use rand::{RngCore, SeedableRng};
 use std::cell::Cell; use std::cmp;
+use core::cmp::min;
 // Remove later
 use std::collections::HashSet;
 use std::marker::PhantomData;
 
-pub struct Hnsw<D, F, const M: usize, const M0: usize> {
+pub struct EntryPoint {
+    pub node_index: usize,
+    pub feature_index: usize,
+    pub layer: usize,
+    pub distance: u32,
+}
+
+pub struct Hnsw<D, F, const M: usize, const M0: usize, const EF: usize = 400> {
     features: Vec<F>,
     upper_layers: Vec<Vec<Node<M>>>,
     zero_layer: Vec<Node<M0>>,
+    enter_point: &Node<>,
     prng: StdRng,
-    ef: usize,
+    _phantom: PhantomData<D>,
     pub candidates_explored: Cell<usize>, // Remove later
     pub neighbors_explored: Cell<usize>,
-    _phantom: PhantomData<D>, // Add this line
 }
 
-impl<D, F, const M: usize, const M0: usize> Hnsw<D, F, M, M0>
+impl<D, F, const M: usize, const M0: usize, const EF: usize> Hnsw<D, F, M, M0, EF>
 where
     D: DistanceAlgorithm<F>,
     F: FeatureType,
 {
-    pub fn new(ef: usize) -> Self {
+    pub fn new() -> Self {
         Self {
             features: vec![],
             upper_layers: vec![],
             zero_layer: vec![],
             prng: StdRng::seed_from_u64(42), // Deterministic seed
-            ef,
             candidates_explored: Cell::new(0), // For debug purposes only
             neighbors_explored: Cell::new(0),
-            _phantom: PhantomData, // Add this line
+            _phantom: PhantomData, 
         }
     }
 
@@ -47,34 +54,13 @@ where
 
         // The data structure is empty
         if self.zero_layer.is_empty() {
-            self.zero_layer.push(Node {
-                feature_index: 0,
-                next_node: 0,
-                neighbors: [usize::MAX; M0],
-                neighbor_count: 0
-            });
-
-            // Add the node in higher layers (in case needed) (LAYER 1+)
-            while self.upper_layers.len() < new_level {
-                self.upper_layers.push(vec![
-                    Node {
-                        feature_index: 0,
-                        next_node: 0,
-                        neighbors: [usize::MAX; M],
-                        neighbor_count: 0
-                    }
-                ]);
-            }
-            return feature_ref
+            self.initialize(new_level);
+            return 0;
         }
 
-        let mut ef = if new_level >= self.upper_layers.len() {
-            self.ef
-        } else {
-            1
-        }; // Check if mut is needed here.
+        let ef = if new_level >= self.upper_layers.len() { EF } else { 1 };
 
-        let mut visited_neighbors: HashSet<usize> = HashSet::new(); // Maybe just store the node index? For better perfomance: WE ARE USING POINTERS!!
+        let mut visited_neighbors: HashSet<usize> = HashSet::new();
 
         let mut enter_point = 0;
         let mut score: u32 = 0;
@@ -85,7 +71,7 @@ where
             );
             visited_neighbors.insert(0);
         } else {
-            let feature_index = self.upper_layers.last().unwrap().first().unwrap().feature_index;
+            let feature_index = self.upper_layers.last().unwrap().first().unwrap().feature_index; // First element in top layer is the entry point
             visited_neighbors.insert(feature_index);
             score = D::calculate_distance(
                 self.features[self.upper_layers.last().unwrap().first().unwrap().feature_index].get_id(),
@@ -94,6 +80,7 @@ where
             );
         }
 
+        // Descend to the first insertion level
         for layer_ix in (new_level..self.upper_layers.len()).rev() {
             //println!("[I1] Descending to the first insertion level. Current level is: {}", layer_ix);
             let knn_neighbors = self.search_upper_layers(&self.features[feature_ref], (enter_point, score), ef, layer_ix + 1, &mut visited_neighbors);
@@ -103,13 +90,12 @@ where
             score = *nearest_neighbor_distance;
 
             //println!("[I2] Enter point for the next layer is: {}", enter_point);
-            ef = if layer_ix == new_level  { self.ef } else { 1 };
         }
        // println!("Layers to insert: {:?}. New level: {}. Current len: {}", layers_to_insert, new_level, self.layers.len());
 
-        // From new_level to layer 0
-        for layer_ix in (0..core::cmp::min(new_level, self.upper_layers.len())).rev() {
-            let mut knn_neighbors = self.search_upper_layers(&self.features[feature_ref], (enter_point, score), self.ef, layer_ix + 1, &mut visited_neighbors);
+        // Insert from new_level to layer 1
+        for layer_ix in (0..min(new_level, self.upper_layers.len())).rev() {
+            let mut knn_neighbors = self.search_upper_layers(&self.features[feature_ref], (enter_point, score), EF, layer_ix + 1, &mut visited_neighbors);
            // println!("[I3] Inserting at layer: {}. Numbers of neighbors it will have: {:?}", layer_ix, knn_neighbors.len());
             self.add_node_upper(&mut knn_neighbors, layer_ix);
             let (nearest_neighbor_index, nearest_neighbor_distance) = knn_neighbors.first().unwrap();
@@ -119,8 +105,8 @@ where
             //println!("[I4] Enter point for the next layer is: {}", enter_point);
         }
 
-        // Layer 0 insertion
-        let mut knn_neighbors = self.search_layer_zero(&self.features[feature_ref], (enter_point, score), self.ef, &mut visited_neighbors);
+        // Insert on layer 0
+        let mut knn_neighbors = self.search_layer_zero(&self.features[feature_ref], (enter_point, score), EF, &mut visited_neighbors);
         self.add_node_zero(&mut knn_neighbors);
 
         // Create new layers up to new_level
@@ -138,6 +124,28 @@ where
         //self.print_layers();
 
         return feature_ref;
+    }
+
+    pub fn initialize(&mut self, new_level: usize) {
+        // The data structure is empty
+        self.zero_layer.push(Node {
+            feature_index: 0,
+            next_node: 0,
+            neighbors: [usize::MAX; M0],
+            neighbor_count: 0
+        });
+
+        // Add the node in higher layers (in case needed) (LAYER 1+)
+        while self.upper_layers.len() < new_level {
+            self.upper_layers.push(vec![
+                Node {
+                    feature_index: 0,
+                    next_node: 0,
+                    neighbors: [usize::MAX; M],
+                    neighbor_count: 0
+                }
+            ]);
+        }    
     }
 
     #[inline(always)]
@@ -518,7 +526,7 @@ where
 
 impl<const M: usize, const M0: usize> Default for Hnsw<NormalDistance, NumberFeature, M, M0> {
     fn default() -> Self {
-        Self::new( 400)
+        Self::new()
     }
     
 }

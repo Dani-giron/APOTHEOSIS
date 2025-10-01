@@ -46,9 +46,9 @@ pub fn main() {
     //let data = create_tlsh_objects(&hashes);
 
     // Initialize vectors before pushing
-    let dataset: Vec<String> = hashes[..10000].to_vec();
+    let dataset: Vec<String> = hashes[..60000].to_vec();
     let dataset_copy: Vec<String> = dataset.clone();
-    let queries: Vec<String> = hashes[1000000..1000100].to_vec();
+    let queries: Vec<String> = hashes[1000000..1001000].to_vec();
     let mut apotheosis = Apotheosis::<TlshHashFeature, TLSHDistance, 32, 60>::new();
     let creation_start: Instant = Instant::now();
 

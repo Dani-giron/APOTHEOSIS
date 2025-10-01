@@ -2,7 +2,7 @@ use std::hash::{Hash, Hasher};
 
 #[derive(Debug, Clone)]
 pub struct Node<const N: usize> {
-    pub next_node: usize,
+    pub next_node: usize, // Pointer to this node but in the next layer
     pub feature_index: usize,
     pub neighbors: [usize; N], // TODO: Save the distances aswell?
     pub neighbor_count: usize,  

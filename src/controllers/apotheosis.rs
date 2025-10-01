@@ -1,31 +1,31 @@
 // AUTHORS: Daniel Huici and Ricardo J. Rodríguez
 // Copyright (c) 2025
 // GPLv3 License
-// [reverseame@unizar.es](mailto:reverseame@unizar.es)
+// reverseame@unizar.es
 
 use radix_tree::{Node, Radix};
 use crate::controllers::hnsw::Hnsw;
 use crate::datalayer::algorithms::DistanceAlgorithm;
 use crate::datalayer::features::FeatureType;
 
-pub struct Apotheosis<F, D, const M: usize, const M0: usize> 
+pub struct Apotheosis<F, D, const M: usize, const M0: usize, const EF: usize = 400> 
 where 
     F: FeatureType,
     D: DistanceAlgorithm<F>,
 {
-    pub hnsw: Hnsw<D, F, M, M0>,
+    pub hnsw: Hnsw<D, F, M, M0, EF>,
     pub radix: Node<char, Option<usize>>,
 }
 
-impl<F, D, const M: usize, const M0: usize> Apotheosis<F, D, M, M0> 
+impl<F, D, const M: usize, const M0: usize, const EF: usize> Apotheosis<F, D, M, M0, EF> 
 where 
     F: FeatureType,
     D: DistanceAlgorithm<F>
 {
     pub fn new() -> Self {
         Self {
-            hnsw: Hnsw::new(400),
-            radix: Node::<char, Option<usize>>::new("F::RadixKeyType::default()", None),
+            hnsw: Hnsw::new(),
+            radix: Node::<char, Option<usize>>::new("", None),
         }
     }
 

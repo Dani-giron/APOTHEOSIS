@@ -1,8 +1,6 @@
 use crate::datalayer::features::{FeatureType, NumberFeature, TlshHashFeature};
 use tlsh2::TlshDefault;
 
-
-
 pub trait DistanceAlgorithm<F>
     where 
     F: FeatureType,
@@ -12,7 +10,6 @@ pub trait DistanceAlgorithm<F>
 
 pub struct NormalDistance;
 impl DistanceAlgorithm<NumberFeature> for NormalDistance {
-    
     fn calculate_distance(a: &u32, b: &u32) -> u32 {
         a.abs_diff(*b)
     }

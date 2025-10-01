@@ -48,7 +48,7 @@ impl FeatureType for TlshHashFeature {
 
     fn create(s: String) -> Self {
         let id = TlshDefault::from_str(&s).unwrap();
-        TlshHashFeature { id, radix_key: s }
+        TlshHashFeature { id, radix_key: s}
     }
 
     fn get_id(&self) -> &Self::IdType {
