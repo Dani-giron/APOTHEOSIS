@@ -11,18 +11,10 @@ use core::cmp::min;
 use std::collections::HashSet;
 use std::marker::PhantomData;
 
-pub struct EntryPoint {
-    pub node_index: usize,
-    pub feature_index: usize,
-    pub layer: usize,
-    pub distance: u32,
-}
-
 pub struct Hnsw<D, F, const M: usize, const M0: usize, const EF: usize = 400> {
     features: Vec<F>,
     upper_layers: Vec<Vec<Node<M>>>,
     zero_layer: Vec<Node<M0>>,
-    enter_point: &Node<>,
     prng: StdRng,
     _phantom: PhantomData<D>,
     pub candidates_explored: Cell<usize>, // Remove later
@@ -47,46 +39,26 @@ where
     }
 
     pub fn insert(&mut self, feature: F) -> usize { // TODO: Change return
-        let new_level = self.random_level();
+        let insertion_level = self.random_level();
         //println!("[I0] Inserting new feature {:?}. New level to insert is: {}", feature.get_id(), new_level);
         let feature_ref = self.features.len();
         self.features.push(feature);
 
         // The data structure is empty
         if self.zero_layer.is_empty() {
-            self.initialize(new_level);
+            self.initialize(insertion_level);
             return 0;
         }
 
-        let ef = if new_level >= self.upper_layers.len() { EF } else { 1 };
-
-        let mut visited_neighbors: HashSet<usize> = HashSet::new();
-
-        let mut enter_point = 0;
-        let mut score: u32 = 0;
-        if self.upper_layers.is_empty() {
-            score = D::calculate_distance(
-                self.features[0].get_id(),
-                self.features[feature_ref].get_id(),
-            );
-            visited_neighbors.insert(0);
-        } else {
-            let feature_index = self.upper_layers.last().unwrap().first().unwrap().feature_index; // First element in top layer is the entry point
-            visited_neighbors.insert(feature_index);
-            score = D::calculate_distance(
-                self.features[self.upper_layers.last().unwrap().first().unwrap().feature_index].get_id(),
-                self.features[feature_ref].get_id(),
-
-            );
-        }
+        let mut visited_neighbors: HashSet<usize> = HashSet::new(); // We use feature indexes here
+        let (mut enter_point, mut score) = self.get_enter_point(feature_ref, &mut visited_neighbors);
 
         // Descend to the first insertion level
-        for layer_ix in (new_level..self.upper_layers.len()).rev() {
+        for layer_ix in (insertion_level..self.upper_layers.len()).rev() {
             //println!("[I1] Descending to the first insertion level. Current level is: {}", layer_ix);
-            let knn_neighbors = self.search_upper_layers(&self.features[feature_ref], (enter_point, score), ef, layer_ix + 1, &mut visited_neighbors);
+            let knn_neighbors: Vec<(usize, u32)> = self.search_upper_layers(&self.features[feature_ref], (enter_point, score), 1, layer_ix + 1, &mut visited_neighbors);
             let (nearest_neighbor_index, nearest_neighbor_distance) = knn_neighbors.first().unwrap();
-            let next_node_id = self.upper_layers[layer_ix][*nearest_neighbor_index].next_node; // From the nearest neighbor found, we go to the same node on the next layer
-            enter_point = next_node_id;
+            enter_point = self.upper_layers[layer_ix][*nearest_neighbor_index].next_node; // From the nearest neighbor found, we go to the same node on the next layer
             score = *nearest_neighbor_distance;
 
             //println!("[I2] Enter point for the next layer is: {}", enter_point);
@@ -94,14 +66,14 @@ where
        // println!("Layers to insert: {:?}. New level: {}. Current len: {}", layers_to_insert, new_level, self.layers.len());
 
         // Insert from new_level to layer 1
-        for layer_ix in (0..min(new_level, self.upper_layers.len())).rev() {
+        for layer_ix in (0..min(insertion_level, self.upper_layers.len())).rev() {
             let mut knn_neighbors = self.search_upper_layers(&self.features[feature_ref], (enter_point, score), EF, layer_ix + 1, &mut visited_neighbors);
            // println!("[I3] Inserting at layer: {}. Numbers of neighbors it will have: {:?}", layer_ix, knn_neighbors.len());
             self.add_node_upper(&mut knn_neighbors, layer_ix);
             let (nearest_neighbor_index, nearest_neighbor_distance) = knn_neighbors.first().unwrap();
-            let next_node_id = self.upper_layers[layer_ix][*nearest_neighbor_index].next_node; 
-            enter_point = next_node_id;
+            enter_point = self.upper_layers[layer_ix][*nearest_neighbor_index].next_node; 
             score = *nearest_neighbor_distance;
+
             //println!("[I4] Enter point for the next layer is: {}", enter_point);
         }
 
@@ -110,11 +82,12 @@ where
         self.add_node_zero(&mut knn_neighbors);
 
         // Create new layers up to new_level
-        while self.upper_layers.len() < new_level {
+        while self.upper_layers.len() < insertion_level {
             let node = Node {
                 next_node: if self.upper_layers.len() != 0 {self.upper_layers.last().unwrap().len() - 1 } else { self.zero_layer.len() - 1} ,
                 feature_index: self.features.len() - 1,
                 neighbors: [!0; M],
+                neighbor_distances: [!0; M],
                 neighbor_count: 0
             };
             self.upper_layers.push(vec![node]);
@@ -126,30 +99,37 @@ where
         return feature_ref;
     }
 
-    pub fn initialize(&mut self, new_level: usize) {
+    pub fn initialize(&mut self, insertion_level: usize) {
         // The data structure is empty
-        self.zero_layer.push(Node {
-            feature_index: 0,
-            next_node: 0,
-            neighbors: [usize::MAX; M0],
-            neighbor_count: 0
-        });
+        self.zero_layer.push(Node::new_empty(0, 0));
 
         // Add the node in higher layers (in case needed) (LAYER 1+)
-        while self.upper_layers.len() < new_level {
-            self.upper_layers.push(vec![
-                Node {
-                    feature_index: 0,
-                    next_node: 0,
-                    neighbors: [usize::MAX; M],
-                    neighbor_count: 0
-                }
-            ]);
+        while self.upper_layers.len() < insertion_level {
+            self.upper_layers.push(vec![ Node::new_empty(0, 0) ]);
         }    
     }
 
+    #[inline]
+    fn get_enter_point(&self, target_feature_ref: usize, visited: &mut HashSet<usize>) -> (usize, u32) {
+        let (node_idx, feature_idx) = if self.upper_layers.is_empty() {
+            (0, 0)
+        } else {
+            let entry_feature_idx = self.upper_layers.last().unwrap()[0].feature_index;
+            (0, entry_feature_idx)
+        };
+        
+        visited.insert(feature_idx);
+        let distance = D::calculate_distance(
+            self.features[feature_idx].get_id(),
+            self.features[target_feature_ref].get_id(),
+        );
+        
+        (node_idx, distance)
+    }
+
+
     #[inline(always)]
-    fn get_node_feature_index(&self, layer_idx: usize, index: usize) -> usize {
+    fn get_node_feature_index(&self, layer_idx: usize, index: usize) -> usize { // Maybe use enums?
         if layer_idx == 0 {
             self.zero_layer[index].feature_index
         } else {
@@ -169,13 +149,14 @@ where
     fn add_node_upper(&mut self, new_neighbors: &mut Vec<(usize, u32)>, layer_idx: usize) {
         let new_node_index = self.upper_layers[layer_idx].len();
         let mut neighbors = [!0; M];
+        let mut neighbor_distances = [!0; M];
         new_neighbors.truncate(M);
         let n_neighbors = cmp::min(new_neighbors.len(), M);
 
         for i in 0..n_neighbors {
             neighbors[i] = new_neighbors[i].0.clone();
+            neighbor_distances[i] = new_neighbors[i].1.clone();
         }
-
 
         let new_node = Node {
             feature_index: self.features.len() - 1,
@@ -185,12 +166,13 @@ where
                     self.upper_layers[layer_idx - 1].len()
                 },
             neighbors: neighbors,
+            neighbor_distances: neighbor_distances,
             neighbor_count: n_neighbors
         };
 
         self.upper_layers[layer_idx].push(new_node);
 
-       // println!("[AN] Number of new neighbors: {}", n_neighbors);
+        // println!("[AN] Number of new neighbors: {}", n_neighbors);
 
         // Use the data we already have instead of accessing the node again
         self.connect_neighbors(new_node_index, &new_neighbors, layer_idx);
@@ -199,16 +181,21 @@ where
     fn add_node_zero(&mut self, new_neighbors: &mut Vec<(usize, u32)>) {
         let new_node_index = self.zero_layer.len();
         let mut neighbors = [!0; M0];
+        let mut neighbor_distances = [!0; M0];
+
         new_neighbors.truncate(M0);
         let n_neighbors = cmp::min(new_neighbors.len(), M0);
 
         for i in 0..n_neighbors {
             neighbors[i] = new_neighbors[i].0.clone();
+            neighbor_distances[i] = new_neighbors[i].1.clone();
+
         }
         self.zero_layer.push( Node {
             feature_index: self.features.len() - 1,
             next_node: 0,
             neighbors: neighbors,
+            neighbor_distances: neighbor_distances,
             neighbor_count: n_neighbors
         });
 
