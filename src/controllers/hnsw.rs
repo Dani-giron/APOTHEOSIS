@@ -174,8 +174,7 @@ where
 
         // println!("[AN] Number of new neighbors: {}", n_neighbors);
 
-        // Use the data we already have instead of accessing the node again
-        self.connect_neighbors(new_node_index, &new_neighbors, layer_idx);
+        self.connect_neighbors_upper(new_node_index, &new_neighbors, layer_idx);
     }
 
     fn add_node_zero(&mut self, new_neighbors: &mut Vec<(usize, u32)>) {
@@ -200,7 +199,7 @@ where
         });
 
         //println!("[A0] Add node ok. Connecting neighbors... | Feature index was: {}", self.features.len() - 1);
-        self.connect_neighbors_zero(new_node_index, new_neighbors);
+        self.connect_neighbors_zero( new_node_index, &new_neighbors);
     }
 
     fn connect_neighbors_zero(&mut self, new_node_index: usize, new_neighbors: &Vec<(usize, u32)>) {
@@ -228,8 +227,7 @@ where
         }
     }
 
-    fn connect_neighbors(&mut self, new_node_index: usize, new_neighbors: &Vec<(usize, u32)>, layer_idx: usize) {
-        
+    fn connect_neighbors_upper(&mut self, new_node_index: usize, new_neighbors: &Vec<(usize, u32)>, layer_idx: usize) {
         for &(neighbor_idx, new_distance) in new_neighbors {
             let neighbor_node = &mut self.upper_layers[layer_idx][neighbor_idx];
             
