@@ -1,5 +1,5 @@
 use apotheosis2::controllers::apotheosis::Apotheosis;
-use apotheosis2::datalayer::algorithms::{TLSHDistance};
+use apotheosis2::datalayer::algorithms::{TlshDistance};
 use apotheosis2::datalayer::features::{FeatureType, TlshHashFeature};
 use tlsh2::TlshDefault;
 use std::str::FromStr;
@@ -49,7 +49,7 @@ pub fn main() {
     let dataset: Vec<String> = hashes[..60000].to_vec();
     let dataset_copy: Vec<String> = dataset.clone();
     let queries: Vec<String> = hashes[1000000..1001000].to_vec();
-    let mut apotheosis = Apotheosis::<TlshHashFeature, TLSHDistance, 32, 60>::new();
+    let mut apotheosis = Apotheosis::<TlshHashFeature, TlshDistance, 32, 64, 64>::new();
     let creation_start: Instant = Instant::now();
 
     println!("Dataset size: {}, Queries size: {}", dataset.len(), queries.len());
@@ -59,11 +59,11 @@ pub fn main() {
     }
 
     let result = apotheosis.search("T1008100007FFA5C48F0F33EB5AEB455158576FE205AB2CA6D51A4828F24B2B408961F3B".to_string(), 1);
-    println!("Distance: {}, Hash: {}", result[0].0, result[0].1.radix_key);
+    println!("Distance: {}", result[0].0);
     let creation_time: std::time::Duration = creation_start.elapsed();
 
     let mut brute_results: Vec<(u32, TlshDefault)> = Vec::new();
-    let mut apo_results: Vec<(u32, &TlshHashFeature)> = Vec::new();
+    let mut apo_results: Vec<(u32, &TlshDefault)> = Vec::new();
 
     let brute_start = Instant::now();
     
@@ -96,7 +96,7 @@ pub fn main() {
     println!("Starting APOTHEOSIS search...");
 
     for n in &queries {
-        let results: Vec<(u32, &TlshHashFeature)> = apotheosis.search(n.to_string(), 42);
+        let results: Vec<(u32, &TlshDefault)> = apotheosis.search(n.to_string(), 42);
         apo_results.push(results[0].clone());
     }
 
@@ -104,7 +104,7 @@ pub fn main() {
 
     let mut matches = 0;
     for i in 0..apo_results.len() {
-        if apo_results[i].0 == brute_results[i].0 && apo_results[i].1.get_id().hash() == brute_results[i].1.hash() {
+        if apo_results[i].0 == brute_results[i].0 && apo_results[i].1.hash() == brute_results[i].1.hash() {
             matches += 1;
         }
     }

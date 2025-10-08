@@ -7,6 +7,8 @@ pub struct Node<const N: usize> { // TODO: Create an ID for each node to see if 
     pub neighbors: [usize; N],
     pub neighbor_distances: [u32; N],
     pub neighbor_count: usize,
+    // TODO: feature index? No! pointer to id (of type whatever feature type like <FeatureType> determined by) Node<const N: usize, F: FeatureType>
+    // An array in the Apotheosis main class for the metadata? A pointer here to the item on that array?
 }
 
 impl<const N: usize> Node<N> {

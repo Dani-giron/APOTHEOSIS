@@ -1,5 +1,7 @@
+use apotheosis2::controllers::apotheosis::Apotheosis;
 use apotheosis2::datalayer::algorithms::NormalDistance;
-use apotheosis2::{controllers::hnsw::Hnsw, datalayer::features::NumberFeature};
+use apotheosis2::datalayer::features::FeatureType;
+use apotheosis2::{datalayer::features::NumberFeature};
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 use std::u32::MAX;
@@ -9,8 +11,8 @@ use std::time::Instant;
 pub fn main() {
     // Simple approach with thread_rng
     let mut rng = StdRng::seed_from_u64(42); // Use same seed for reproducibility
-    let random_numbers: Vec<u32> = (0..10000).map(|_| rng.gen_range(0..100_000_000)).collect();
-    let random_queries: Vec<u32> = (0..1000).map(|_| rng.gen_range(0..100_000_000)).collect();
+    let random_numbers: Vec<u32> = (0..8000).map(|_| rng.gen_range(0..100_000_000)).collect();
+    let random_queries: Vec<u32> = (0..5800).map(|_| rng.gen_range(0..100_000_000)).collect();
     //random_numbers = vec![13, 52, 54, 63, 99, 40, 3, 61, 41, 34];
     //println!("Base: {:?}", random_numbers);
 
@@ -19,14 +21,19 @@ pub fn main() {
     //print<ln!("{:?}", random_numbers);
     let mut features: Vec<NumberFeature> = vec![];
 
+    println!("Queries: {:?}", random_queries);
+
     for &n in &random_numbers {
-        features.push( NumberFeature { id: n } )
+        if n == 6 {
+            println!("Inserting special number 6");
+        }
+        features.push( NumberFeature::create(n.to_string()) )
     }
 
     let creation_start = Instant::now();
     //let mut model: Hnsw<NormalDistance, NumberFeature> = Hnsw::default();
 
-    let mut model: Hnsw<NormalDistance, NumberFeature, 12, 24> = Hnsw::default();
+    let mut model = Apotheosis::<NumberFeature, NormalDistance, 32, 64, 64>::new();
 
     for f in features {
         model.insert(f);
@@ -55,14 +62,14 @@ pub fn main() {
         closest = (MAX, MAX);
     }
 
-    println!("{:?}", brute_results);
+    //println!("{:?}", brute_results);
 
 
     let query_start = Instant::now();
 
 
     for n in random_queries.iter() {
-        let results = model.knn_search(&NumberFeature { id: *n }, 24, 5);
+        let results = model.search(n.to_string(), 1);
         all_results.push(results[0]);
     }
 

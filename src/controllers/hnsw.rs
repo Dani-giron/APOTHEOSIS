@@ -1,18 +1,28 @@
 use crate::datalayer::algorithms::DistanceAlgorithm;
-use crate::datalayer::algorithms::NormalDistance;
-use crate::datalayer::features::FeatureType;
-use crate::datalayer::features::NumberFeature;
 use crate::datalayer::nodes::Node;
 use rand::rngs::StdRng;
 use rand::{RngCore, SeedableRng};
 use std::cell::Cell; use std::cmp;
 use core::cmp::min;
+use std::marker::PhantomData;
 // Remove later
 use std::collections::HashSet;
-use std::marker::PhantomData;
 
-pub struct Hnsw<D, F, const M: usize, const M0: usize, const EF: usize = 400> {
-    features: Vec<F>,
+
+// Pâra no olvidarme.
+// La idea aquí es que F sea NO todo el tipo de feature, sino solo su IdType (el hash en sí mismo, no la estructura completa).
+// Así, en vez de F: FeatureType, sería F: IdType. Pero claro, habría que cambiar muchas cosas en el código.
+// Por ejemplo, en vez de guardar Vec<F>, guardar Vec<F::IdType>.
+// Y en vez de pedir &F en los métodos, pedir &F::IdType.
+// Pero claro, entonces no podríamos acceder a get_radix_key()? Esto es cierto?
+// En Apotheosis, tendríamos una lista de metadatas aparte, y en HNSW solo los IdType.
+// O quizás no, quizás en Apotheosis seguimos guardando Vec<F>, pero en HNSW solo Vec<F::IdType>.
+
+pub struct Hnsw<D, ID, const M: usize, const M0: usize, const EF: usize = 400> 
+where
+    D: DistanceAlgorithm<ID>,
+{
+    features: Vec<ID>,
     upper_layers: Vec<Vec<Node<M>>>,
     zero_layer: Vec<Node<M0>>,
     prng: StdRng,
@@ -21,10 +31,9 @@ pub struct Hnsw<D, F, const M: usize, const M0: usize, const EF: usize = 400> {
     pub neighbors_explored: Cell<usize>,
 }
 
-impl<D, F, const M: usize, const M0: usize, const EF: usize> Hnsw<D, F, M, M0, EF>
-where
-    D: DistanceAlgorithm<F>,
-    F: FeatureType,
+impl<D, ID, const M: usize, const M0: usize, const EF: usize> Hnsw<D, ID, M, M0, EF>
+where 
+    D: DistanceAlgorithm<ID>
 {
     pub fn new() -> Self {
         Self {
@@ -38,7 +47,7 @@ where
         }
     }
 
-    pub fn insert(&mut self, feature: F) -> usize { // TODO: Change return
+    pub fn insert(&mut self, feature: ID) -> usize { // TODO: Change return
         let insertion_level = self.random_level();
         //println!("[I0] Inserting new feature {:?}. New level to insert is: {}", feature.get_id(), new_level);
         let feature_ref = self.features.len();
@@ -84,7 +93,7 @@ where
         // Create new layers up to new_level
         while self.upper_layers.len() < insertion_level {
             let node = Node {
-                next_node: if self.upper_layers.len() != 0 {self.upper_layers.last().unwrap().len() - 1 } else { self.zero_layer.len() - 1} ,
+                next_node: if self.upper_layers.len() != 0 {self.upper_layers.last().unwrap().len() - 1 } else { self.zero_layer.len() - 1 },
                 feature_index: self.features.len() - 1,
                 neighbors: [!0; M],
                 neighbor_distances: [!0; M],
@@ -120,8 +129,8 @@ where
         
         visited.insert(feature_idx);
         let distance = D::calculate_distance(
-            self.features[feature_idx].get_id(),
-            self.features[target_feature_ref].get_id(),
+            &self.features[feature_idx],
+            &self.features[target_feature_ref],
         );
         
         (node_idx, distance)
@@ -298,7 +307,7 @@ where
         currently_found_nearest_neighbors
     }*/
 
-    fn search_upper_layers(&self, feature: &F, (enter_point, score): (usize, u32), ef: usize, layer_idx: usize, visited_neighbors: &mut HashSet<usize>) -> Vec<(usize, u32)> {
+    fn search_upper_layers(&self, feature: &ID, (enter_point, score): (usize, u32), ef: usize, layer_idx: usize, visited_neighbors: &mut HashSet<usize>) -> Vec<(usize, u32)> {
         let mut candidates: Vec<usize> = vec![enter_point];
         let mut currently_found_nearest_neighbors: Vec<(usize, u32)> = vec![(enter_point, score)];
         //let time_start = Instant::now();
@@ -316,8 +325,8 @@ where
                 
                 if visited_neighbors.insert(neighbor_feature_index) {
                     let score = D::calculate_distance(
-                        self.features[neighbor_feature_index].get_id(),
-                        feature.get_id(),
+                        &self.features[neighbor_feature_index],
+                        feature,
                     );
 
                     let pos = currently_found_nearest_neighbors.partition_point(|n| n.1 <= score);
@@ -340,7 +349,7 @@ where
 
     }
 
-    fn search_layer_zero(&self, feature: &F, (enter_point, score): (usize, u32), ef: usize, visited_neighbors: &mut HashSet<usize>) -> Vec<(usize, u32)> {
+    fn search_layer_zero(&self, feature: &ID, (enter_point, score): (usize, u32), ef: usize, visited_neighbors: &mut HashSet<usize>) -> Vec<(usize, u32)> {
         let mut candidates: Vec<usize> = vec![enter_point];
         let mut currently_found_nearest_neighbors: Vec<(usize, u32)> = vec![(enter_point, score)];
         //let time_start = Instant::now();
@@ -360,8 +369,8 @@ where
                 if visited_neighbors.insert(neighbor_feature_index) {
                     //let compare_start = Instant::now();
                     let score = D::calculate_distance(
-                        self.features[neighbor_feature_index].get_id(),
-                        feature.get_id(),
+                        &self.features[neighbor_feature_index],
+                        feature,
                     );
                     //elapsed_compare += compare_start.elapsed().as_nanos();
 
@@ -423,12 +432,12 @@ where
         
     }
 
-    pub fn knn_search(&self, feature: &F, ef: usize, k: usize) -> Vec<(u32, &F)> {
+    pub fn knn_search(&self, feature: &ID, ef: usize, k: usize) -> Vec<(u32, &ID)> {
         let mut visited_neighbors: HashSet<usize> = HashSet::new();
         let mut enter_point = 0;
         let mut score = D::calculate_distance(
-            self.features[self.upper_layers.last().unwrap()[0].feature_index].get_id(),
-            feature.get_id(),
+            &self.features[self.upper_layers.last().unwrap()[0].feature_index],
+            feature,
         ); 
 
         let mut knn_neighbors: Vec<(usize, u32)>;
@@ -443,7 +452,7 @@ where
 
         knn_neighbors = self.search_layer_zero(&feature, (enter_point, score), ef, &mut visited_neighbors);
 
-        let mut results: Vec<(u32, &F)> = vec![];
+        let mut results: Vec<(u32, &ID)> = vec![];
         for (i, score) in knn_neighbors {
             results.push((score, &self.features[i]))
         }
@@ -451,15 +460,15 @@ where
         results
     }
 
-    pub fn get_zero_layer_node(&self, index: usize) -> Vec<(u32, &F)> { // TODO: Rename this function
-        let mut results: Vec<(u32, &F)> = vec![];
+    pub fn get_zero_layer_node(&self, index: usize) -> Vec<(u32, &ID)> { // TODO: Rename this function
+        let mut results: Vec<(u32, &ID)> = vec![];
         results.push((0, &self.features[self.zero_layer[index].feature_index]));
 
         let node = &self.zero_layer[index];
         let neigbors = node.active_neighbors();
 
         for neighbor_index in neigbors {
-            let score = D::calculate_distance(&self.features[*neighbor_index].get_id(), &self.features[node.feature_index].get_id());
+            let score = D::calculate_distance(&self.features[*neighbor_index], &self.features[node.feature_index]);
             results.push((score, &self.features[*neighbor_index]));
         }
 
@@ -469,9 +478,3 @@ where
  
 }
 
-impl<const M: usize, const M0: usize> Default for Hnsw<NormalDistance, NumberFeature, M, M0> {
-    fn default() -> Self {
-        Self::new()
-    }
-    
-}

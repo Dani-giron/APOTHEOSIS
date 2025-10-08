@@ -3,6 +3,7 @@
 // GPLv3 License
 // reverseame@unizar.es
 
+
 use radix_tree::{Node, Radix};
 use crate::controllers::hnsw::Hnsw;
 use crate::datalayer::algorithms::DistanceAlgorithm;
@@ -11,16 +12,24 @@ use crate::datalayer::features::FeatureType;
 pub struct Apotheosis<F, D, const M: usize, const M0: usize, const EF: usize = 400> 
 where 
     F: FeatureType,
-    D: DistanceAlgorithm<F>,
+    F::IdType: Clone, 
+    D: DistanceAlgorithm<F::IdType>,
 {
-    pub hnsw: Hnsw<D, F, M, M0, EF>,
+    pub hnsw: Hnsw<D, F::IdType, M, M0, EF>,
     pub radix: Node<char, Option<usize>>,
+}
+
+pub struct ApotheosisResult<ID> {
+    pub exact_match: bool,
+    pub distance: u32,
+    pub feature: ID,
 }
 
 impl<F, D, const M: usize, const M0: usize, const EF: usize> Apotheosis<F, D, M, M0, EF> 
 where 
     F: FeatureType,
-    D: DistanceAlgorithm<F>
+    F::IdType: Clone,  
+    D: DistanceAlgorithm<F::IdType>
 {
     pub fn new() -> Self {
         Self {
@@ -42,10 +51,11 @@ where
         let key_to_insert = feature.get_radix_key().clone();
 
         if self.radix.find(key_to_find.clone()).is_some() {
+            println!("Key already exists in radix tree: {:?}", key_to_find);
             return false;
         }
         
-        let hnsw_node_index = self.hnsw.insert(feature);
+        let hnsw_node_index = self.hnsw.insert(feature.get_id().clone());
         self.radix.insert(key_to_insert, Some(hnsw_node_index));
         
         true
@@ -61,18 +71,17 @@ where
     /// 
     /// # Returns
     /// * `Vec<(u32, &F)>` - List of tuples with distance and feature reference
-    pub fn search(&self, key: String, k: usize) -> Vec<(u32, &F)> {
-        if let Some(radix_node) = self.radix.find(key.clone()) {
-            if let Some(node_index) = radix_node.data {
-                return self.hnsw.get_zero_layer_node(node_index.unwrap());
-            } else {
-                return vec![];
-            }
-        } else {
-            let hnsw_results: Vec<(u32, &F)> = self.hnsw.knn_search(&F::create(key), 24, k); // TODO: Make ef configurable?
-            return hnsw_results;
-        }
-    }
+    pub fn search(&self, key: String, k: usize) -> Vec<(u32, &F::IdType)> {
+        let temp_feature = F::create(key);
 
+        if let Some(radix_node) = self.radix.find(temp_feature.get_radix_key().clone()) {
+            if let Some(Some(node_index)) = radix_node.data {
+                return self.hnsw.get_zero_layer_node(node_index);
+            }
+        }
+        
+        let hnsw_results: Vec<(u32, &F::IdType)> = self.hnsw.knn_search(temp_feature.get_id(), 24, k);
+        hnsw_results
+    }
 
 }
