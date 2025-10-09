@@ -4,8 +4,6 @@ use apotheosis2::datalayer::features::{FeatureType, TlshHashFeature};
 use tlsh2::TlshDefault;
 use std::str::FromStr;
 use std::time::Instant;
-
-
 use serde_json::Value;
 use std::fs;
 
@@ -27,12 +25,6 @@ fn read_hashes_from_json<P: AsRef<std::path::Path>>(path: P) -> Vec<String> {
     Vec::new()
 }
 
-/* 
-fn create_tlsh_objects(hashes: &[String]) -> Vec<TlshHashFeature> {
-    hashes.iter()
-        .filter_map(|h| TlshDefault::from_str(h).ok().map(TlshHashFeature::new))
-        .collect()
-}*/
 
 fn create_tlsh_object(hash: String) -> TlshDefault {
     TlshDefault::from_str(&hash).unwrap()
@@ -49,13 +41,13 @@ pub fn main() {
     let dataset: Vec<String> = hashes[..60000].to_vec();
     let dataset_copy: Vec<String> = dataset.clone();
     let queries: Vec<String> = hashes[1000000..1001000].to_vec();
-    let mut apotheosis = Apotheosis::<TlshHashFeature, TlshDistance, 32, 64, 64>::new();
+    let mut apotheosis = Apotheosis::<TlshHashFeature, TlshDistance, (), 32, 64, 64>::new();
     let creation_start: Instant = Instant::now();
 
     println!("Dataset size: {}, Queries size: {}", dataset.len(), queries.len());
     println!("Starting insertion into HNSW model...");
     for f in dataset_copy {
-        apotheosis.insert(TlshHashFeature::create(f));
+        apotheosis.insert(TlshHashFeature::create(f), ());
     }
 
     let result = apotheosis.search("T1008100007FFA5C48F0F33EB5AEB455158576FE205AB2CA6D51A4828F24B2B408961F3B".to_string(), 1);
@@ -63,7 +55,7 @@ pub fn main() {
     let creation_time: std::time::Duration = creation_start.elapsed();
 
     let mut brute_results: Vec<(u32, TlshDefault)> = Vec::new();
-    let mut apo_results: Vec<(u32, &TlshDefault)> = Vec::new();
+    let mut apo_results: Vec<(u32, &TlshDefault, _)> = Vec::new();
 
     let brute_start = Instant::now();
     
@@ -96,7 +88,7 @@ pub fn main() {
     println!("Starting APOTHEOSIS search...");
 
     for n in &queries {
-        let results: Vec<(u32, &TlshDefault)> = apotheosis.search(n.to_string(), 42);
+        let results: Vec<(u32, &TlshDefault, _)> = apotheosis.search(n.to_string(), 42);
         apo_results.push(results[0].clone());
     }
 

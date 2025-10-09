@@ -398,7 +398,6 @@ where
         (-libm::log(uniform) * libm::log(M as f64).recip()) as usize
     }
     
-
     pub fn print_layers(&mut self) {
         println!("======================== LAYER 0 ========================");
         for node in 0..self.zero_layer.len() {
@@ -432,44 +431,56 @@ where
         
     }
 
-    pub fn knn_search(&self, feature: &ID, ef: usize, k: usize) -> Vec<(u32, &ID)> {
+    /// Performs k-nearest neighbor search in the HNSW structure.
+    ///
+    /// # Parameters
+    /// * `query_id` - The query ID to search for
+    /// * `ef` - Size of the dynamic candidate list (exploration factor)
+    /// * `k` - Number of nearest neighbors to return
+    ///
+    /// # Returns
+    /// * `Vec<(u32, usize, &ID)>` - Tuples of (distance, index, ID reference)
+    pub fn knn_search(&self, query_id: &ID, ef: usize, k: usize) -> Vec<(u32, usize, &ID)> {
         let mut visited_neighbors: HashSet<usize> = HashSet::new();
-        let mut enter_point = 0;
-        let mut score = D::calculate_distance(
-            &self.features[self.upper_layers.last().unwrap()[0].feature_index],
-            feature,
-        ); 
+        
+        let (mut enter_point, mut score) = if let Some(top_layer) = self.upper_layers.last() {
+            let entry_id_index = top_layer[0].feature_index;
+            let initial_distance = D::calculate_distance(&self.features[entry_id_index], query_id);
+            (0, initial_distance)
+        } else {
+            let entry_id_index = self.zero_layer[0].feature_index;
+            let initial_distance = D::calculate_distance(&self.features[entry_id_index], query_id);
+            (0, initial_distance)
+        };
 
-        let mut knn_neighbors: Vec<(usize, u32)>;
+        // Descend through upper layers to layer 0
         for layer_ix in (0..self.upper_layers.len()).rev() {
-            knn_neighbors = self.search_upper_layers(&feature, (enter_point, score), 1, layer_ix + 1 as usize, &mut visited_neighbors);
+            let knn_neighbors = self.search_upper_layers(query_id, (enter_point, score), 1,layer_ix + 1, &mut visited_neighbors);
             let (nearest_neighbor_index, nearest_neighbor_distance) = knn_neighbors[0];
-            let next_node_id = self.upper_layers[layer_ix as usize][nearest_neighbor_index].next_node; // From the nearest neighbor found, we go to the same node on the next layer
-            enter_point = next_node_id;
+            enter_point = self.upper_layers[layer_ix][nearest_neighbor_index].next_node;
             score = nearest_neighbor_distance;
         }
 
+        // Search at layer 0
+        let knn_neighbors = self.search_layer_zero(query_id, (enter_point, score), ef, &mut visited_neighbors);
 
-        knn_neighbors = self.search_layer_zero(&feature, (enter_point, score), ef, &mut visited_neighbors);
-
-        let mut results: Vec<(u32, &ID)> = vec![];
-        for (i, score) in knn_neighbors {
-            results.push((score, &self.features[i]))
-        }
-
-        results
+        knn_neighbors
+            .into_iter()
+            .map(|(index, distance)| (distance, index, &self.features[index]))
+            .collect()
     }
 
-    pub fn get_zero_layer_node(&self, index: usize) -> Vec<(u32, &ID)> { // TODO: Rename this function
-        let mut results: Vec<(u32, &ID)> = vec![];
-        results.push((0, &self.features[self.zero_layer[index].feature_index]));
+
+    pub fn get_neighbors_node(&self, index: usize) -> Vec<(u32, usize, &ID)> {
+        let mut results: Vec<(u32, usize, &ID)> = vec![];
+        results.push((0, index, &self.features[self.zero_layer[index].feature_index]));
 
         let node = &self.zero_layer[index];
         let neigbors = node.active_neighbors();
 
         for neighbor_index in neigbors {
             let score = D::calculate_distance(&self.features[*neighbor_index], &self.features[node.feature_index]);
-            results.push((score, &self.features[*neighbor_index]));
+            results.push((score, *neighbor_index, &self.features[*neighbor_index]));
         }
 
         results

@@ -33,10 +33,10 @@ pub fn main() {
     let creation_start = Instant::now();
     //let mut model: Hnsw<NormalDistance, NumberFeature> = Hnsw::default();
 
-    let mut model = Apotheosis::<NumberFeature, NormalDistance, 32, 64, 64>::new();
+    let mut model = Apotheosis::<NumberFeature, NormalDistance, (), 32, 64, 64>::new();
 
     for f in features {
-        model.insert(f);
+        model.insert(f, ());
     }
     let creation_time: std::time::Duration = creation_start.elapsed();
 
