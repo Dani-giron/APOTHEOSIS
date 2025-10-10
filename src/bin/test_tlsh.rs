@@ -2,6 +2,7 @@ use apotheosis2::controllers::apotheosis::Apotheosis;
 use apotheosis2::datalayer::algorithms::{TlshDistance};
 use apotheosis2::datalayer::features::{FeatureType, TlshHashFeature};
 use tlsh2::TlshDefault;
+use tracing::info;
 use std::str::FromStr;
 use std::time::Instant;
 use serde_json::Value;
@@ -32,6 +33,7 @@ fn create_tlsh_object(hash: String) -> TlshDefault {
 
 // cargo run --bin testing
 pub fn main() {
+
     let hashes = read_hashes_from_json("output_hashes.json");
     println!("Number of hashes: {:?}", hashes.len());
 

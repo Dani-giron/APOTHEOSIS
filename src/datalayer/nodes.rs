@@ -1,14 +1,13 @@
 use std::hash::{Hash, Hasher};
 
 #[derive(Debug, Clone)]
-pub struct Node<const N: usize> { // TODO: Create an ID for each node to see if we can optimize the hashing and equality checks (and thus, overall performance)
+pub struct Node<const N: usize> {
     pub next_node: usize, // Pointer to this node but in the next layer
     pub feature_index: usize,
     pub neighbors: [usize; N],
     pub neighbor_distances: [u32; N],
     pub neighbor_count: usize,
-    // TODO: feature index? No! pointer to id (of type whatever feature type like <FeatureType> determined by) Node<const N: usize, F: FeatureType>
-    // An array in the Apotheosis main class for the metadata? A pointer here to the item on that array?
+
 }
 
 impl<const N: usize> Node<N> {
@@ -22,6 +21,7 @@ impl<const N: usize> Node<N> {
         }
     }
 
+    #[inline]
     pub fn active_neighbors(&self) -> &[usize] {
         &self.neighbors[..self.neighbor_count]
     }
