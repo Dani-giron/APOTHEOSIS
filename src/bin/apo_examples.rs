@@ -1,6 +1,7 @@
 use apotheosis2::controllers::apotheosis::Apotheosis;
 use apotheosis2::datalayer::algorithms::{NormalDistance, TlshDistance};
 use apotheosis2::datalayer::features::{FeatureType, TlshHashFeature};
+use apotheosis2::datalayer::metadata::FileMetadata;
 use apotheosis2::{datalayer::features::NumberFeature};
 
 
@@ -18,16 +19,9 @@ pub fn example_without_metadata() {
     for (distance, id, _) in results {
         println!("  ID: {} - Distance: {}", id, distance);
     }
-}
 
-// Define your custom metadata structure
-#[derive(Debug, Clone)]
-pub struct FileMetadata {
-    pub filename: String,
-    pub file_path: String,
-    pub version: String,
-    pub size: u64,
-    pub timestamp: u64,
+    apotheosis.draw("numbers");
+
 }
 
 pub fn example_with_metadata() {
@@ -78,6 +72,8 @@ pub fn example_with_metadata() {
         println!("  TLSH Distance: {}", distance);
         println!("  Hash: {:?}", id.hash());
     }
+    apotheosis.draw("files");
+
 }
 
 pub fn main() {

@@ -1,5 +1,6 @@
 use crate::datalayer::algorithms::DistanceAlgorithm;
 use crate::datalayer::nodes::Node;
+use gexf::{Edge, EdgeType, Gexf, Node as GexfNode};
 use rand::rngs::StdRng;
 use rand::{RngCore, SeedableRng};
 use tracing::debug;
@@ -302,6 +303,7 @@ where
         (-libm::log(uniform) * libm::log(M as f64).recip()) as usize
     }
     
+    // Debugging function to print HNSW layers (all nodes and their connections)
     pub fn print_layers(&mut self) {
         println!("======================== LAYER 0 ========================");
         for node in 0..self.zero_layer.len() {
@@ -390,6 +392,64 @@ where
         results
         
     }
- 
+
+    pub fn draw_model(&self) -> Vec<(Vec<usize>, Vec<(String, String, f32)>)> {
+        let mut layer_gexfs = Vec::new();
+
+        let nodes_edges_layer0 = self.get_nodes_with_edges(0, &self.zero_layer);
+        layer_gexfs.push(nodes_edges_layer0);
+
+        for (idx, layer) in self.upper_layers.iter().enumerate() {
+            let nodes_edges_layer = self.get_nodes_with_edges(idx + 1, layer);
+            layer_gexfs.push(nodes_edges_layer);
+        }
+
+        layer_gexfs
+    }
+
+    /// Creates a GEXF structure for a single layer with nodes and edges
+    fn get_nodes_with_edges<const N: usize>(&self, layer_idx: usize, nodes: &[Node<N>]) -> (Vec<usize>, Vec<(String, String, f32)>) {
+        let mut seen_edges: HashSet<(usize, usize)> = HashSet::new();
+        let mut draw_nodes: Vec<usize> = Vec::new();
+        let mut draw_edges: Vec<(String, String, f32)> = Vec::new();
+
+        // Add all nodes
+        for n in nodes {
+            draw_nodes.push(n.feature_index);
+        }
+
+        // Add edges between nodes
+        for node in nodes {
+            for (nb_i, &neighbor_idx) in node.active_neighbors().iter().enumerate() {
+                let source_node_idx = node.feature_index;
+
+                let target_node_idx = if layer_idx == 0 {
+                    self.zero_layer[neighbor_idx].feature_index
+                } else {
+                    self.upper_layers[layer_idx - 1][neighbor_idx].feature_index
+                };
+                
+                // Avoid duplicate edges in bidirectional cases
+                let edge_pair = if source_node_idx < target_node_idx {
+                    (source_node_idx, target_node_idx)
+                } else {
+                    (target_node_idx, source_node_idx)
+                };
+                
+                if seen_edges.insert(edge_pair) {
+                    let dist = node.neighbor_distances[nb_i];
+                    draw_edges.push((
+                        source_node_idx.to_string(),
+                        target_node_idx.to_string(),
+                        dist as f32,
+                    ));
+                }
+            }
+        }
+
+        (draw_nodes, draw_edges)
+    }
+
+    
 }
 
