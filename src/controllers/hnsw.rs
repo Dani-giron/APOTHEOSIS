@@ -1,6 +1,5 @@
 use crate::datalayer::algorithms::DistanceAlgorithm;
 use crate::datalayer::nodes::Node;
-use gexf::{Edge, EdgeType, Gexf, Node as GexfNode};
 use rand::rngs::StdRng;
 use rand::{RngCore, SeedableRng};
 use tracing::debug;
@@ -64,7 +63,7 @@ where
         for layer_ix in (0..min(insertion_level, self.upper_layers.len())).rev() {
             let mut knn_neighbors = self.search_upper_layers(&self.features[feature_ref], (enter_point, score), EF, layer_ix + 1, &mut visited_neighbors);
             debug!("[I3] Inserting at layer: {}. Numbers of neighbors it will have: {:?}", layer_ix, knn_neighbors.len());
-            self.add_node_upper(&mut knn_neighbors, layer_ix);
+            self.add_node(&mut knn_neighbors, Some(layer_ix));
             let (nearest_neighbor_index, nearest_neighbor_distance) = knn_neighbors.first().unwrap();
             enter_point = self.upper_layers[layer_ix][*nearest_neighbor_index].next_node; 
             score = *nearest_neighbor_distance;
@@ -74,7 +73,7 @@ where
 
         // Insert on layer 0
         let mut knn_neighbors = self.search_layer_zero(&self.features[feature_ref], (enter_point, score), EF, &mut visited_neighbors);
-        self.add_node_zero(&mut knn_neighbors);
+        self.add_node(&mut knn_neighbors, None);
 
         // Create new layers up to new_level
         while self.upper_layers.len() < insertion_level {
@@ -120,112 +119,118 @@ where
         (node_idx, distance)
     }
 
-    fn add_node_upper(&mut self, new_neighbors: &mut Vec<(usize, u32)>, layer_idx: usize) {
-        let new_node_index = self.upper_layers[layer_idx].len();
-        let mut neighbors = [!0; M];
-        let mut neighbor_distances = [!0; M];
-        new_neighbors.truncate(M);
-        let n_neighbors = cmp::min(new_neighbors.len(), M);
+    #[inline]
+    fn add_node(&mut self, new_neighbors: &mut Vec<(usize, u32)>, layer_idx: Option<usize>) {
+        match layer_idx {
+            Some(idx) => { // Upper layer insertion
+                let new_node_index = self.upper_layers[idx].len();
+                let mut neighbors = [!0; M];
+                let mut neighbor_distances = [!0; M];
+                new_neighbors.truncate(M);
+                let n_neighbors = cmp::min(new_neighbors.len(), M);
 
-        for i in 0..n_neighbors {
-            neighbors[i] = new_neighbors[i].0.clone();
-            neighbor_distances[i] = new_neighbors[i].1.clone();
+                for i in 0..n_neighbors {
+                    neighbors[i] = new_neighbors[i].0;
+                    neighbor_distances[i] = new_neighbors[i].1;
+                }
+
+                let new_node = Node {
+                    feature_index: self.features.len() - 1,
+                    next_node: if idx == 0 {
+                        self.zero_layer.len()
+                    } else {
+                        self.upper_layers[idx - 1].len()
+                    },
+                    neighbors,
+                    neighbor_distances,
+                    neighbor_count: n_neighbors,
+                };
+
+                self.upper_layers[idx].push(new_node);
+                debug!("[AN] Number of new neighbors: {}", n_neighbors);
+                self.connect_neighbors(new_node_index, new_neighbors, Some(idx));
+            }
+            None => { // Zero layer insetion
+                let new_node_index = self.zero_layer.len();
+                let mut neighbors = [!0; M0];
+                let mut neighbor_distances = [!0; M0];
+                new_neighbors.truncate(M0);
+                let n_neighbors = cmp::min(new_neighbors.len(), M0);
+
+                for i in 0..n_neighbors {
+                    neighbors[i] = new_neighbors[i].0;
+                    neighbor_distances[i] = new_neighbors[i].1;
+                }
+
+                self.zero_layer.push(Node {
+                    feature_index: self.features.len() - 1,
+                    next_node: 0,
+                    neighbors,
+                    neighbor_distances,
+                    neighbor_count: n_neighbors,
+                });
+
+                debug!("[A0] Node added successfully. Connecting neighbors... | Feature index was: {}", self.features.len() - 1);
+                self.connect_neighbors(new_node_index, new_neighbors, None);
+            }
         }
-
-        let new_node = Node {
-            feature_index: self.features.len() - 1,
-            next_node: if layer_idx == 0 {
-                    self.zero_layer.len()
-                } else {
-                    self.upper_layers[layer_idx - 1].len()
-                },
-            neighbors: neighbors,
-            neighbor_distances: neighbor_distances,
-            neighbor_count: n_neighbors
-        };
-
-        self.upper_layers[layer_idx].push(new_node);
-
-        debug!("[AN] Number of new neighbors: {}", n_neighbors);
-
-        self.connect_neighbors_upper(new_node_index, &new_neighbors, layer_idx);
     }
 
-    fn add_node_zero(&mut self, new_neighbors: &mut Vec<(usize, u32)>) {
-        let new_node_index = self.zero_layer.len();
-        let mut neighbors = [!0; M0];
-        let mut neighbor_distances = [!0; M0];
-
-        new_neighbors.truncate(M0);
-        let n_neighbors = cmp::min(new_neighbors.len(), M0);
-
-        for i in 0..n_neighbors {
-            neighbors[i] = new_neighbors[i].0.clone();
-            neighbor_distances[i] = new_neighbors[i].1.clone();
-
-        }
-        self.zero_layer.push( Node {
-            feature_index: self.features.len() - 1,
-            next_node: 0,
-            neighbors: neighbors,
-            neighbor_distances: neighbor_distances,
-            neighbor_count: n_neighbors
-        });
-
-        debug!("[A0] Node added successfully. Connecting neighbors... | Feature index was: {}", self.features.len() - 1);
-        self.connect_neighbors_zero( new_node_index, &new_neighbors);
-    }
-
-    fn connect_neighbors_zero(&mut self, new_node_index: usize, new_neighbors: &Vec<(usize, u32)>) {
-        for &(neighbor_idx, new_distance) in new_neighbors {
-            let neighbor_node = &mut self.zero_layer[neighbor_idx];
-            
-            if neighbor_node.neighbor_count < M0 { // There's an empty slot on the neighbor list. Add it there
-                let slot = neighbor_node.neighbor_count;
-                neighbor_node.neighbors[slot] = new_node_index;
-                neighbor_node.neighbor_distances[slot] = new_distance;
-                neighbor_node.neighbor_count += 1;
-            } else { // Neighbor list is full - find worst neighbor using stored distances
-                let (worst_ix, worst_distance) = neighbor_node
-                    .active_distances() 
-                    .iter()
-                    .enumerate()
-                    .max_by_key(|&(_, &distance)| distance)
-                    .unwrap();
-                
-                if new_distance < *worst_distance {
-                    neighbor_node.neighbors[worst_ix] = new_node_index;
-                    neighbor_node.neighbor_distances[worst_ix] = new_distance;
+    #[inline]
+    fn connect_neighbors(&mut self, new_node_index: usize, new_neighbors: &[(usize, u32)], layer_idx: Option<usize>) {
+        match layer_idx {
+            Some(idx) => {
+                for &(neighbor_idx, new_distance) in new_neighbors {
+                    let neighbor_node = &mut self.upper_layers[idx][neighbor_idx];
+                    
+                    if neighbor_node.neighbor_count < M {
+                        let slot = neighbor_node.neighbor_count;
+                        neighbor_node.neighbors[slot] = new_node_index;
+                        neighbor_node.neighbor_distances[slot] = new_distance;
+                        neighbor_node.neighbor_count += 1;
+                    } else {
+                        let (worst_ix, worst_distance) = neighbor_node
+                            .active_distances()
+                            .iter()
+                            .enumerate()
+                            .max_by_key(|&(_, &distance)| distance)
+                            .unwrap();
+                        
+                        if new_distance < *worst_distance {
+                            neighbor_node.neighbors[worst_ix] = new_node_index;
+                            neighbor_node.neighbor_distances[worst_ix] = new_distance;
+                        }
+                    }
+                }
+            }
+            None => {
+                for &(neighbor_idx, new_distance) in new_neighbors {
+                    let neighbor_node = &mut self.zero_layer[neighbor_idx];
+                    
+                    if neighbor_node.neighbor_count < M0 {
+                        let slot = neighbor_node.neighbor_count;
+                        neighbor_node.neighbors[slot] = new_node_index;
+                        neighbor_node.neighbor_distances[slot] = new_distance;
+                        neighbor_node.neighbor_count += 1;
+                    } else {
+                        let (worst_ix, worst_distance) = neighbor_node
+                            .active_distances()
+                            .iter()
+                            .enumerate()
+                            .max_by_key(|&(_, &distance)| distance)
+                            .unwrap();
+                        
+                        if new_distance < *worst_distance {
+                            neighbor_node.neighbors[worst_ix] = new_node_index;
+                            neighbor_node.neighbor_distances[worst_ix] = new_distance;
+                        }
+                    }
                 }
             }
         }
     }
 
-    fn connect_neighbors_upper(&mut self, new_node_index: usize, new_neighbors: &Vec<(usize, u32)>, layer_idx: usize) {
-        for &(neighbor_idx, new_distance) in new_neighbors {
-            let neighbor_node = &mut self.upper_layers[layer_idx][neighbor_idx];
-            
-            if neighbor_node.neighbor_count < M {
-                let slot = neighbor_node.neighbor_count;
-                neighbor_node.neighbors[slot] = new_node_index;
-                neighbor_node.neighbor_distances[slot] = new_distance;
-                neighbor_node.neighbor_count += 1;
-            } else {
-                let (worst_ix, worst_distance) = neighbor_node
-                    .active_distances() 
-                    .iter()
-                    .enumerate()
-                    .max_by_key(|&(_, &distance)| distance) 
-                    .unwrap();
-                
-                if new_distance < *worst_distance {
-                    neighbor_node.neighbors[worst_ix] = new_node_index;
-                    neighbor_node.neighbor_distances[worst_ix] = new_distance; 
-                }
-            }
-        }
-    }
-
+    #[inline]
     fn search_upper_layers(&self, feature: &ID, (enter_point, score): (usize, u32), ef: usize, layer_idx: usize, visited_neighbors: &mut HashSet<usize>) -> Vec<(usize, u32)> {
         let mut candidates: Vec<usize> = vec![enter_point];
         let mut currently_found_nearest_neighbors: Vec<(usize, u32)> = vec![(enter_point, score)];
@@ -262,7 +267,7 @@ where
 
     }
 
-    #[inline(always)]
+    #[inline]
     fn search_layer_zero(&self, feature: &ID, (enter_point, score): (usize, u32), ef: usize, visited_neighbors: &mut HashSet<usize>) -> Vec<(usize, u32)> {
         let mut candidates: Vec<usize> = vec![enter_point];
         let mut currently_found_nearest_neighbors: Vec<(usize, u32)> = vec![(enter_point, score)];

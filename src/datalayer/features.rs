@@ -1,6 +1,7 @@
 use tlsh2::{TlshDefault};
 use std::str::FromStr;
 
+
 pub trait FeatureType {
     type IdType;
     
@@ -9,6 +10,7 @@ pub trait FeatureType {
     fn get_radix_key(&self) -> &String;
 }
 
+#[derive(Clone)]
 pub struct Feature<ID> {
     pub id: ID,
     pub radix_key: String,

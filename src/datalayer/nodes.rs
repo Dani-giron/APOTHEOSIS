@@ -26,6 +26,7 @@ impl<const N: usize> Node<N> {
         &self.neighbors[..self.neighbor_count]
     }
 
+    #[inline]
     pub fn active_distances(&self) -> &[u32] {
         &self.neighbor_distances[..self.neighbor_count]
     }

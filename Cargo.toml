@@ -14,6 +14,7 @@ radix-tree = "0.2.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 gexf = "0.1.1"
+serde = { version ="1.0.228", features = ["derive"] }
 
 [profile.dev]
 opt-level = 3
