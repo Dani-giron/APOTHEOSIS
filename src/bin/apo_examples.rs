@@ -13,7 +13,7 @@ pub fn example_without_metadata() {
     apotheosis.insert(NumberFeature::create("75".to_string()), ());
     apotheosis.insert(NumberFeature::create("50".to_string()), ());
     
-    let results = apotheosis.search("60".to_string(), 3);
+    let results = apotheosis.search("60".to_string(), 3, None);
     
     println!("Nearest neighbors to 60:");
     for (distance, id, _) in results {
@@ -61,7 +61,7 @@ pub fn example_with_metadata() {
     apotheosis.insert(feature3, metadata3);
     
     let query_hash = "T1C9A001940A5E782665C08A2809E40AA1E05E24211126BA4B363D5DD84B5A9A5D1B511D".to_string();
-    let results = apotheosis.search(query_hash, 5);
+    let results = apotheosis.search(query_hash, 5, None);
     
     println!("Similar files found:");
     for (distance, id, meta) in results {

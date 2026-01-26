@@ -64,7 +64,7 @@ pub fn main() {
 
 
     for n in random_queries.iter() {
-        let results = model.search(n.to_string(), 1);
+        let results = model.search(n.to_string(), 1, None);
         all_results.push(results[0]);
     }
 

@@ -80,18 +80,19 @@ where
     ///   - `u32`: Distance/score to the query
     ///   - `&F::IdType`: Reference to the feature's ID
     ///   - `&Meta`: Reference to the associated metadata (or `&()` if no metadata)
-    pub fn search(&self, key: String, k: usize) -> Vec<(u32, &F::IdType, &Meta)> {
-        let temp_feature = F::create(key);
+    pub fn search(&self, key: String, k: usize, ef_search: Option<usize>) -> Vec<(u32, &F::IdType, &Meta)> {
+        let temp_feature = F::create( key);
+        let ef_search = ef_search.unwrap_or(24); 
 
         let hnsw_results: Vec<(u32, usize, &F::IdType)> = 
             if let Some(radix_node) = self.radix.find(temp_feature.get_radix_key().clone()) {
             if let Some(Some(node_index)) = radix_node.data {
                 self.hnsw.get_neighbors_node(node_index)
             } else {
-                self.hnsw.knn_search(temp_feature.get_id(), 24, k)
+                self.hnsw.knn_search(temp_feature.get_id(), k, ef_search)
             }
         } else {
-            self.hnsw.knn_search(temp_feature.get_id(), 24, k)
+            self.hnsw.knn_search(temp_feature.get_id(), k, ef_search)
         };
         
         hnsw_results

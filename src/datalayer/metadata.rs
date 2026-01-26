@@ -63,3 +63,21 @@ impl ApotheosisMetadata for BinaryMetadata {
         ]
     }
 }
+
+#[derive(Debug)]
+pub struct OpenWrt {
+    pub version: String,
+    pub binary: String,
+    pub function_name: String,
+}
+
+
+pub struct OpenWrtMetadata {
+    pub data: Vec<OpenWrt>,
+}
+
+impl ApotheosisMetadata for OpenWrtMetadata {
+    fn get_attributes(&self) -> Vec<(String, String)> {
+        vec![]
+    }
+}

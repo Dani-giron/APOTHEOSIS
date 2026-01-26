@@ -170,14 +170,71 @@ where
                     neighbor_count: n_neighbors,
                 });
 
-                debug!("[A0] Node added successfully. Connecting neighbors... | Feature index was: {}", self.features.len() - 1);
+                debug!("[A0] Node added successfully. Now connecting neighbors... | Feature index was: {}", self.features.len() - 1);
                 self.connect_neighbors(new_node_index, new_neighbors, None);
             }
         }
     }
 
+
+    // Connects a single node to its new selected neighbors.
+    // If the neighbor list is full, select only better candidates.
     #[inline]
     fn connect_neighbors(&mut self, new_node_index: usize, new_neighbors: &[(usize, u32)], layer_idx: Option<usize>) {
+        match layer_idx {
+            Some(idx) => {
+                for &(neighbor_idx, new_distance) in new_neighbors {
+                    let neighbor_node = &mut self.upper_layers[idx][neighbor_idx];
+                    
+                    if neighbor_node.neighbor_count < M {
+                        let slot = neighbor_node.neighbor_count;
+                        neighbor_node.neighbors[slot] = new_node_index;
+                        neighbor_node.neighbor_distances[slot] = new_distance;
+                        neighbor_node.neighbor_count += 1;
+                    } else {
+                        let (worst_ix, worst_distance) = neighbor_node
+                            .active_distances()
+                            .iter()
+                            .enumerate()
+                            .max_by_key(|&(_, &distance)| distance)
+                            .unwrap();
+                        
+                        if new_distance < *worst_distance {
+                            neighbor_node.neighbors[worst_ix] = new_node_index;
+                            neighbor_node.neighbor_distances[worst_ix] = new_distance;
+                        }
+                    }
+                }
+            }
+            None => {
+                for &(neighbor_idx, new_distance) in new_neighbors {
+                    let neighbor_node = &mut self.zero_layer[neighbor_idx];
+                    
+                    if neighbor_node.neighbor_count < M0 {
+                        let slot = neighbor_node.neighbor_count;
+                        neighbor_node.neighbors[slot] = new_node_index;
+                        neighbor_node.neighbor_distances[slot] = new_distance;
+                        neighbor_node.neighbor_count += 1;
+                    } else {
+                        let (worst_ix, worst_distance) = neighbor_node
+                            .active_distances()
+                            .iter()
+                            .enumerate()
+                            .max_by_key(|&(_, &distance)| distance)
+                            .unwrap();
+                        
+                        if new_distance < *worst_distance {
+                            neighbor_node.neighbors[worst_ix] = new_node_index;
+                            neighbor_node.neighbor_distances[worst_ix] = new_distance;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[inline]
+    fn connect_neighbors_heuristic(&mut self, new_node_index: usize, new_neighbors: &[(usize, u32)], layer_idx: Option<usize>) {
         match layer_idx {
             Some(idx) => {
                 for &(neighbor_idx, new_distance) in new_neighbors {
@@ -351,7 +408,7 @@ where
     ///
     /// # Returns
     /// * `Vec<(u32, usize, &ID)>` - Tuples of (distance, index, ID reference)
-    pub fn knn_search(&self, query_id: &ID, ef: usize, k: usize) -> Vec<(u32, usize, &ID)> {
+    pub fn knn_search(&self, query_id: &ID, k: usize, ef: usize) -> Vec<(u32, usize, &ID)> {
         let mut visited_neighbors: HashSet<usize> = HashSet::new();
         
         let (mut enter_point, mut score) = if let Some(top_layer) = self.upper_layers.last() {
@@ -377,10 +434,10 @@ where
 
         knn_neighbors
             .into_iter()
+            .take(k)
             .map(|(index, distance)| (distance, index, &self.features[index]))
             .collect()
     }
-
 
     pub fn get_neighbors_node(&self, index: usize) -> Vec<(u32, usize, &ID)> {
         let mut results: Vec<(u32, usize, &ID)> = vec![];

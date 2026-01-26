@@ -51,7 +51,7 @@ pub fn main() {
         apotheosis.insert(TlshHashFeature::create(f), ());
     }
 
-    let result = apotheosis.search("T1008100007FFA5C48F0F33EB5AEB455158576FE205AB2CA6D51A4828F24B2B408961F3B".to_string(), 1);
+    let result = apotheosis.search("T1008100007FFA5C48F0F33EB5AEB455158576FE205AB2CA6D51A4828F24B2B408961F3B".to_string(), 1, None);
     println!("Distance: {}", result[0].0);
     let creation_time: std::time::Duration = creation_start.elapsed();
 
@@ -89,7 +89,7 @@ pub fn main() {
     println!("Starting APOTHEOSIS search...");
 
     for n in &queries {
-        let results: Vec<(u32, &TlshDefault, _)> = apotheosis.search(n.to_string(), 42);
+        let results: Vec<(u32, &TlshDefault, _)> = apotheosis.search(n.to_string(), 42, None);
         apo_results.push(results[0].clone());
     }
 
