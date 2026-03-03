@@ -1,13 +1,12 @@
 use apotheosis2::controllers::apotheosis::Apotheosis;
 use apotheosis2::datalayer::algorithms::NormalDistance;
-use apotheosis2::datalayer::features::FeatureType;
-use apotheosis2::{datalayer::features::NumberFeature};
-use rand::{Rng, SeedableRng};
+use apotheosis2::datalayer::record::{ApotheosisRecord, SimpleNumberRecord};
 use rand::rngs::StdRng;
-use std::u32::MAX;
+use rand::{Rng, SeedableRng};
 use std::time::Instant;
+use std::u32::MAX;
 
-// cargo run --bin testing
+// cargo run --bin test_numbers
 pub fn main() {
     // Simple approach with thread_rng
     let mut rng = StdRng::seed_from_u64(42); // Use same seed for reproducibility
@@ -19,27 +18,27 @@ pub fn main() {
     //let queries: Vec<u32> = (0..100).map(|_| rng.random_range(0..10_000_000)).collect();
 
     //print<ln!("{:?}", random_numbers);
-    let mut features: Vec<NumberFeature> = vec![];
+    let mut features: Vec<SimpleNumberRecord> = vec![];
 
-   // println!("Queries: {:?}", random_queries);
+    // println!("Queries: {:?}", random_queries);
 
     for &n in &random_numbers {
-        features.push( NumberFeature::create(n.to_string()) )
+        features.push(SimpleNumberRecord::create(n.to_string()))
     }
 
     let creation_start = Instant::now();
     //let mut model: Hnsw<NormalDistance, NumberFeature> = Hnsw::default();
 
-    let mut model = Apotheosis::<NumberFeature, NormalDistance, (), 32, 64, 64>::new();
+    let mut model = Apotheosis::<SimpleNumberRecord, NormalDistance, 32, 64, 64>::new();
 
     for f in features {
-        model.insert(f, ());
+        model.insert(f);
     }
     let creation_time: std::time::Duration = creation_start.elapsed();
 
     //model.print_layers();
     println!("HNSW Model created in: {:?}", creation_time);
-    
+
     let mut all_results = Vec::new();
 
     // Brute force search for neighbors
@@ -59,28 +58,24 @@ pub fn main() {
 
     //println!("{:?}", brute_results);
 
-
     let query_start = Instant::now();
 
-
     for n in random_queries.iter() {
-        let results = model.search(n.to_string(), 1, None);
-        all_results.push(results[0]);
+        let results = model.search(n, None, 1, None);
+        all_results.push((results[0].0, results[0].1.search_id()));
     }
 
     let query_time: std::time::Duration = query_start.elapsed();
-
 
     //println!("{:?}", all_results);
 
     let mut matches = 0;
     for i in 0..all_results.len() {
-        if all_results[i].0 == brute_results[i].0 && all_results[i].1 == &brute_results[i].1 {
+        if all_results[i].0 == brute_results[i].0 && all_results[i].1 == brute_results[i].1 {
             matches += 1;
         }
     }
 
     println!("Matches: {}/{}", matches, all_results.len());
     println!("Queries took: {:?}", query_time);
-    
 }

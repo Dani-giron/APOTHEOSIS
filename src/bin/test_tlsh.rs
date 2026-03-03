@@ -1,12 +1,11 @@
 use apotheosis2::controllers::apotheosis::Apotheosis;
-use apotheosis2::datalayer::algorithms::{TlshDistance};
-use apotheosis2::datalayer::features::{FeatureType, TlshHashFeature};
-use tlsh2::TlshDefault;
-use std::str::FromStr;
-use std::time::Instant;
+use apotheosis2::datalayer::algorithms::TlshDistance;
+use apotheosis2::datalayer::record::{ApotheosisRecord, SimpleTlshRecord};
 use serde_json::Value;
 use std::fs;
-
+use std::str::FromStr;
+use std::time::Instant;
+use tlsh2::TlshDefault;
 
 fn read_hashes_from_json<P: AsRef<std::path::Path>>(path: P) -> Vec<String> {
     let data = fs::read_to_string(path).expect("Failed to read JSON file");
@@ -25,42 +24,45 @@ fn read_hashes_from_json<P: AsRef<std::path::Path>>(path: P) -> Vec<String> {
     Vec::new()
 }
 
-
 fn create_tlsh_object(hash: String) -> TlshDefault {
     TlshDefault::from_str(&hash).unwrap()
 }
 
-// cargo run --bin testing
+// cargo run --bin test_tlsh
 pub fn main() {
-
     let hashes = read_hashes_from_json("output_hashes.json");
     println!("Number of hashes: {:?}", hashes.len());
-
-    //let data = create_tlsh_objects(&hashes);
 
     // Initialize vectors before pushing
     let dataset: Vec<String> = hashes[..60000].to_vec();
     let dataset_copy: Vec<String> = dataset.clone();
     let queries: Vec<String> = hashes[1000000..1001000].to_vec();
-    let mut apotheosis = Apotheosis::<TlshHashFeature, TlshDistance, (), 32, 64, 64>::new();
+    let mut apotheosis = Apotheosis::<SimpleTlshRecord, TlshDistance, 32, 64, 64>::new();
     let creation_start: Instant = Instant::now();
 
-    println!("Dataset size: {}, Queries size: {}", dataset.len(), queries.len());
+    println!(
+        "Dataset size: {}, Queries size: {}",
+        dataset.len(),
+        queries.len()
+    );
     println!("Starting insertion into HNSW model...");
     for f in dataset_copy {
-        apotheosis.insert(TlshHashFeature::create(f), ());
+        apotheosis.insert(SimpleTlshRecord::create(f));
     }
 
-    let result = apotheosis.search("T1008100007FFA5C48F0F33EB5AEB455158576FE205AB2CA6D51A4828F24B2B408961F3B".to_string(), 1, None);
+    let query_hash = TlshDefault::from_str(
+        "T1008100007FFA5C48F0F33EB5AEB455158576FE205AB2CA6D51A4828F24B2B408961F3B",
+    )
+    .unwrap();
+    let result = apotheosis.search(&query_hash, None, 1, None);
     println!("Distance: {}", result[0].0);
     let creation_time: std::time::Duration = creation_start.elapsed();
 
     let mut brute_results: Vec<(u32, TlshDefault)> = Vec::new();
-    let mut apo_results: Vec<(u32, &TlshDefault, _)> = Vec::new();
+    let mut apo_results: Vec<(u32, TlshDefault)> = Vec::new();
 
     let brute_start = Instant::now();
-    
-    
+
     println!("Starting brute force search...");
     // --- Brute Force Search ---
     for query in queries.iter() {
@@ -89,15 +91,18 @@ pub fn main() {
     println!("Starting APOTHEOSIS search...");
 
     for n in &queries {
-        let results: Vec<(u32, &TlshDefault, _)> = apotheosis.search(n.to_string(), 42, None);
-        apo_results.push(results[0].clone());
+        let record_hash = TlshDefault::from_str(n).unwrap();
+        let results = apotheosis.search(&record_hash, None, 42, None);
+        apo_results.push((results[0].0, results[0].1.search_id()));
     }
 
     let hnsw_time: std::time::Duration = hnsw_start.elapsed();
 
     let mut matches = 0;
     for i in 0..apo_results.len() {
-        if apo_results[i].0 == brute_results[i].0 && apo_results[i].1.hash() == brute_results[i].1.hash() {
+        if apo_results[i].0 == brute_results[i].0
+            && apo_results[i].1.hash() == brute_results[i].1.hash()
+        {
             matches += 1;
         }
     }
@@ -106,5 +111,4 @@ pub fn main() {
     println!("Creation time: {:?}", creation_time);
     println!("Brute force time: {:?}", brute_time);
     println!("HNSW search time: {:?}", hnsw_time);
-    
 }
