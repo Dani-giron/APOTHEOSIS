@@ -1,13 +1,13 @@
 // AUTHORS: Daniel Huici and Ricardo J. Rodríguez
-// Copyright (c) 2025
+// Copyright (c) 2025 - 2026
 // GPLv3 License
 // reverseame@unizar.es
 
 use crate::controllers::hnsw::Hnsw;
+use crate::controllers::radix_tree::RadixNode;
 use crate::datalayer::algorithms::DistanceAlgorithm;
 use crate::datalayer::record::ApotheosisRecord;
 use gexf::{Edge, EdgeType, Gexf, Node as GefxNode};
-use radix_tree::{Node as RadixNode, Radix};
 use std::fs::{self};
 use std::path::{Path, PathBuf};
 
@@ -17,7 +17,7 @@ where
     D: DistanceAlgorithm<R::MetricId>,
 {
     pub hnsw: Hnsw<D, R::MetricId, M, M0, EF>,
-    pub radix: RadixNode<char, Option<usize>>,
+    pub radix: RadixNode<u8, Option<usize>>,
     pub records: Vec<R>,
 }
 
@@ -29,7 +29,7 @@ where
     pub fn new() -> Self {
         Self {
             hnsw: Hnsw::new(),
-            radix: RadixNode::<char, Option<usize>>::new("", None),
+            radix: RadixNode::<u8, Option<usize>>::new(vec![], None),
             records: vec![],
         }
     }
@@ -47,7 +47,7 @@ where
     pub fn insert(&mut self, item: R) -> bool {
         let key_to_insert = item.radix_key();
 
-        if self.radix.find(key_to_insert.clone()).is_some() {
+        if self.radix.find(key_to_insert.as_bytes()).is_some() {
             println!("Key already exists in radix tree: {:?}", key_to_insert);
             return false;
         }
@@ -55,7 +55,8 @@ where
         let sim_id = item.search_id();
         let hnsw_node_index = self.hnsw.insert(sim_id);
 
-        self.radix.insert(key_to_insert, Some(hnsw_node_index));
+        self.radix
+            .insert(key_to_insert.into_bytes(), Some(hnsw_node_index));
         self.records.push(item);
 
         true
@@ -84,7 +85,7 @@ where
         let ef_search = ef_search.unwrap_or(24);
 
         let hnsw_results: Vec<(u32, usize, &R::MetricId)> = if let Some(key) = radix_key {
-            if let Some(radix_node) = self.radix.find(key.to_string()) {
+            if let Some(radix_node) = self.radix.find(key.as_bytes()) {
                 if let Some(Some(node_index)) = radix_node.data {
                     // Exact match found! Jump directly to neighbors in HNSW
                     self.hnsw.get_neighbors_node(node_index)
