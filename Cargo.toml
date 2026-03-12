@@ -8,12 +8,13 @@ rand_pcg = "0.3.1"
 rand_core = "0.6.3"
 rand = { version = "0.8", features = ["std_rng"] }
 libm = "0.2.1"
-tlsh2 = { version = "1.1.0", features = ["diff"] }
+tlsh2 = { git = "https://github.com/danielhuici/tlsh", features = ["diff", "serde"] }
 serde_json = "1.0.145"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 gexf = "0.1.1"
 serde = { version ="1.0.228", features = ["derive"] }
+bincode = "1.3.3"
 
 [profile.dev]
 opt-level = 3

@@ -11,10 +11,15 @@ use gexf::{Edge, EdgeType, Gexf, Node as GefxNode};
 use std::fs::{self};
 use std::path::{Path, PathBuf};
 
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(bound(
+    serialize = "R: ApotheosisRecord + serde::Serialize, D: DistanceAlgorithm<R::MetricId> + serde::Serialize, R::MetricId: serde::Serialize",
+    deserialize = "R: ApotheosisRecord + serde::Deserialize<'de>, D: DistanceAlgorithm<R::MetricId> + serde::Deserialize<'de>, R::MetricId: serde::Deserialize<'de>"
+))]
 pub struct Apotheosis<R, D, const M: usize = 16, const M0: usize = 32, const EF: usize = 400>
 where
     R: ApotheosisRecord,
-    D: DistanceAlgorithm<R::MetricId>,
+    D: DistanceAlgorithm<R::MetricId> + Default,
 {
     pub hnsw: Hnsw<D, R::MetricId, M, M0, EF>,
     pub radix: RadixNode<u8, Option<usize>>,
@@ -24,7 +29,7 @@ where
 impl<R, D, const M: usize, const M0: usize, const EF: usize> Apotheosis<R, D, M, M0, EF>
 where
     R: ApotheosisRecord,
-    D: DistanceAlgorithm<R::MetricId>,
+    D: DistanceAlgorithm<R::MetricId> + Default,
 {
     pub fn new() -> Self {
         Self {
@@ -47,16 +52,14 @@ where
     pub fn insert(&mut self, item: R) -> bool {
         let key_to_insert = item.radix_key();
 
-        if self.radix.find(key_to_insert.as_bytes()).is_some() {
+        if self.radix.find(&key_to_insert).is_some() {
             println!("Key already exists in radix tree: {:?}", key_to_insert);
             return false;
         }
 
-        let sim_id = item.search_id();
-        let hnsw_node_index = self.hnsw.insert(sim_id);
+        let hnsw_node_index = self.hnsw.insert(item.search_id());
 
-        self.radix
-            .insert(key_to_insert.into_bytes(), Some(hnsw_node_index));
+        self.radix.insert(key_to_insert, Some(hnsw_node_index));
         self.records.push(item);
 
         true
@@ -103,6 +106,26 @@ where
             .into_iter()
             .map(|(distance, index, _id)| (distance, &self.records[index]))
             .collect()
+    }
+
+    /// Dumps the Apotheosis model to a binary file using Bincode.
+    pub fn dump<P: AsRef<Path>>(&self, path: P) -> Result<(), Box<dyn std::error::Error>>
+    where
+        Self: serde::Serialize,
+    {
+        let encoded = bincode::serialize(self)?;
+        fs::write(path, encoded)?;
+        Ok(())
+    }
+
+    /// Loads an Apotheosis model from a binary file using Bincode.
+    pub fn load<P: AsRef<Path>>(path: P) -> Result<Self, Box<dyn std::error::Error>>
+    where
+        Self: serde::de::DeserializeOwned,
+    {
+        let data = fs::read(path)?;
+        let decoded = bincode::deserialize(&data)?;
+        Ok(decoded)
     }
 
     // Exports the HNSW model to GEXF files for Gephi visualization.

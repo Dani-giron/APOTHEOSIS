@@ -1,10 +1,14 @@
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::hash::{Hash, Hasher};
 
-#[derive(Debug, Clone)]
+/// A node in the HNSW data structure
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct HnswNode<const N: usize> {
     pub next_node: u32,     // Pointer to this node but in the next layer
     pub feature_index: u32, // Pointer to the data associated to this node
+    #[serde(with = "serde_array")]
     pub neighbors: [u32; N],
+    #[serde(with = "serde_array")]
     pub neighbor_distances: [u32; N],
     pub neighbor_count: u16,
 }
@@ -48,3 +52,35 @@ impl<const N: usize> PartialEq for HnswNode<N> {
 }
 
 impl<const N: usize> Eq for HnswNode<N> {}
+
+// Helper module for serializing and deserializing const-generic arrays
+// Serde does not support const-generic arrays directly so we need to do this garbage
+mod serde_array {
+    use super::*;
+
+    pub fn serialize<S, T, const N: usize>(array: &[T; N], serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+        T: Serialize,
+    {
+        array.as_slice().serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D, T, const N: usize>(deserializer: D) -> Result<[T; N], D::Error>
+    where
+        D: Deserializer<'de>,
+        T: Deserialize<'de> + Copy + Default,
+    {
+        let vec: Vec<T> = Vec::deserialize(deserializer)?;
+        if vec.len() != N {
+            return Err(serde::de::Error::custom(format!(
+                "expected array of length {}, found {}",
+                N,
+                vec.len()
+            )));
+        }
+        let mut array = [T::default(); N];
+        array[..vec.len()].copy_from_slice(&vec);
+        Ok(array)
+    }
+}

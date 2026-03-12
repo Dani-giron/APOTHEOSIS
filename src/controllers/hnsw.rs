@@ -5,23 +5,32 @@ use rand::rngs::StdRng;
 use rand::{RngCore, SeedableRng};
 use std::cmp;
 use std::collections::HashSet;
-use std::marker::PhantomData;
 use tracing::debug;
 
+fn default_rng() -> StdRng {
+    StdRng::seed_from_u64(42)
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(bound(
+    serialize = "ID: serde::Serialize, D: DistanceAlgorithm<ID> + serde::Serialize",
+    deserialize = "ID: serde::Deserialize<'de>, D: DistanceAlgorithm<ID> + serde::Deserialize<'de>"
+))]
 pub struct Hnsw<D, ID, const M: usize, const M0: usize, const EF: usize = 400>
 where
-    D: DistanceAlgorithm<ID>,
+    D: DistanceAlgorithm<ID> + Default,
 {
     features: Vec<ID>,
     upper_layers: Vec<Vec<HnswNode<M>>>,
     zero_layer: Vec<HnswNode<M0>>,
+    #[serde(skip, default = "default_rng")]
     prng: StdRng,
-    _phantom: PhantomData<D>,
+    distance: D,
 }
 
 impl<D, ID, const M: usize, const M0: usize, const EF: usize> Hnsw<D, ID, M, M0, EF>
 where
-    D: DistanceAlgorithm<ID>,
+    D: DistanceAlgorithm<ID> + Default,
 {
     pub fn new() -> Self {
         Self {
@@ -29,7 +38,7 @@ where
             upper_layers: vec![],
             zero_layer: vec![],
             prng: StdRng::seed_from_u64(42),
-            _phantom: PhantomData,
+            distance: D::default(),
         }
     }
 
@@ -150,7 +159,7 @@ where
         };
 
         visited.insert(feature_idx);
-        let distance = D::calculate_distance(
+        let distance = self.distance.calculate_distance(
             &self.features[feature_idx],
             &self.features[target_feature_ref],
         );
@@ -365,8 +374,9 @@ where
                 debug!("    [S2] Exploring neighbor: {:?}", neighbor);
 
                 if visited_neighbors.insert(neighbor_feature_index) {
-                    let score =
-                        D::calculate_distance(&self.features[neighbor_feature_index], feature);
+                    let score = self
+                        .distance
+                        .calculate_distance(&self.features[neighbor_feature_index], feature);
 
                     let pos = currently_found_nearest_neighbors.partition_point(|n| n.1 <= score);
                     if pos != ef {
@@ -410,8 +420,9 @@ where
                 debug!("    [S2] Exploring neighbor: {:?}", neighbor);
 
                 if visited_neighbors.insert(neighbor_feature_index) {
-                    let score =
-                        D::calculate_distance(&self.features[neighbor_feature_index], feature);
+                    let score = self
+                        .distance
+                        .calculate_distance(&self.features[neighbor_feature_index], feature);
 
                     let pos = currently_found_nearest_neighbors.partition_point(|n| n.1 <= score);
                     if pos != ef {
@@ -486,11 +497,15 @@ where
 
         let (mut enter_point, mut score) = if let Some(top_layer) = self.upper_layers.last() {
             let entry_id_index = top_layer[0].feature_index as usize;
-            let initial_distance = D::calculate_distance(&self.features[entry_id_index], query_id);
+            let initial_distance = self
+                .distance
+                .calculate_distance(&self.features[entry_id_index], query_id);
             (0, initial_distance)
         } else {
             let entry_id_index = self.zero_layer[0].feature_index as usize;
-            let initial_distance = D::calculate_distance(&self.features[entry_id_index], query_id);
+            let initial_distance = self
+                .distance
+                .calculate_distance(&self.features[entry_id_index], query_id);
             (0, initial_distance)
         };
 
@@ -531,7 +546,7 @@ where
         let neigbors = node.active_neighbors();
 
         for neighbor_index in neigbors {
-            let score = D::calculate_distance(
+            let score = self.distance.calculate_distance(
                 &self.features[*neighbor_index as usize],
                 &self.features[node.feature_index as usize],
             );

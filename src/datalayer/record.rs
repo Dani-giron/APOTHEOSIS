@@ -6,7 +6,7 @@ use tlsh2::TlshDefault;
 /// by the Radix exact-match tree and the HNSW proximity graph.
 pub trait ApotheosisRecord {
     type MetricId: Clone; // The mathematical/hashing space representation used by HNSW. E.g., `tlsh2::TlshDefault` or `u32`.
-    fn radix_key(&self) -> String; // The exact-match string identifier used in the Radix Tree.
+    fn radix_key(&self) -> Vec<u8>; // The exact-match string identifier used in the Radix Tree.
     fn search_id(&self) -> Self::MetricId; // The metric representation (e.g., hash) used for similarity calculation in the HNSW graph.
     fn get_attributes(&self) -> Vec<(String, String)> {
         // Optional metadata key-value pairs associated with the ApotheosisRecord. These are exported during model visualization (GEXF).
@@ -16,7 +16,7 @@ pub trait ApotheosisRecord {
 
 // Simple record types (Nodes with no metadata / Dummy records)
 
-#[derive(Clone)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct SimpleRecord<ID> {
     pub id: ID,
     pub radix_key: String,
@@ -25,8 +25,8 @@ pub struct SimpleRecord<ID> {
 impl<ID: Clone> ApotheosisRecord for SimpleRecord<ID> {
     type MetricId = ID;
 
-    fn radix_key(&self) -> String {
-        self.radix_key.clone()
+    fn radix_key(&self) -> Vec<u8> {
+        self.radix_key.clone().into_bytes()
     }
 
     fn search_id(&self) -> Self::MetricId {
@@ -62,28 +62,6 @@ pub struct FileRecord {
     pub timestamp: u64,
 }
 
-impl ApotheosisRecord for FileRecord {
-    type MetricId = TlshDefault;
-
-    fn radix_key(&self) -> String {
-        self.filename.clone()
-    }
-
-    fn search_id(&self) -> Self::MetricId {
-        self.hash.clone()
-    }
-
-    fn get_attributes(&self) -> Vec<(String, String)> {
-        vec![
-            ("filename".to_string(), self.filename.clone()),
-            ("file_path".to_string(), self.file_path.clone()),
-            ("version".to_string(), self.version.clone()),
-            ("size".to_string(), self.size.to_string()),
-            ("timestamp".to_string(), self.timestamp.to_string()),
-        ]
-    }
-}
-
 #[derive(Clone)]
 pub struct WinModuleRecord {
     pub hash: TlshDefault,
@@ -98,8 +76,8 @@ pub struct WinModuleRecord {
 impl ApotheosisRecord for WinModuleRecord {
     type MetricId = TlshDefault;
 
-    fn radix_key(&self) -> String {
-        self.internal_filename.clone()
+    fn radix_key(&self) -> Vec<u8> {
+        self.internal_filename.clone().into_bytes()
     }
 
     fn search_id(&self) -> Self::MetricId {
@@ -129,8 +107,8 @@ pub struct BinaryRecord {
 impl ApotheosisRecord for BinaryRecord {
     type MetricId = TlshDefault;
 
-    fn radix_key(&self) -> String {
-        String::new()
+    fn radix_key(&self) -> Vec<u8> {
+        self.hash.hash().to_vec()
     }
 
     fn search_id(&self) -> Self::MetricId {
@@ -157,15 +135,11 @@ pub struct OpenWrtRecord {
 impl ApotheosisRecord for OpenWrtRecord {
     type MetricId = TlshDefault;
 
-    fn radix_key(&self) -> String {
-        String::new()
+    fn radix_key(&self) -> Vec<u8> {
+        self.hash.hash().to_vec()
     }
 
     fn search_id(&self) -> Self::MetricId {
         self.hash.clone()
-    }
-
-    fn get_attributes(&self) -> Vec<(String, String)> {
-        vec![]
     }
 }
