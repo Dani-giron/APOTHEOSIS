@@ -61,7 +61,7 @@ pub fn main() {
     let query_start = Instant::now();
 
     for n in random_queries.iter() {
-        let results = model.search(n, None, 1, None);
+        let results = model.search(n, 1, None);
         all_results.push((results[0].0, results[0].1.search_id()));
     }
 

@@ -50,28 +50,27 @@ where
     /// * `true` if the record was successfully inserted
     /// * `false` if the record's key already exists in the model
     pub fn insert(&mut self, item: R) -> bool {
-        let key_to_insert = item.radix_key();
-
-        if self.radix.find(&key_to_insert).is_some() {
-            println!("Key already exists in radix tree: {:?}", key_to_insert);
-            return false;
-        }
-
         let hnsw_node_index = self.hnsw.insert(item.search_id());
 
-        self.radix.insert(key_to_insert, Some(hnsw_node_index));
-        self.records.push(item);
+        // Only insert into the Radix fast-path if the metric natively maps to a string key
+        if let Some(key_to_insert) = item.search_id().to_radix_key() {
+            if self.radix.find(&key_to_insert).is_some() {
+                println!("Key already exists in radix tree: {:?}", key_to_insert);
+                return false;
+            }
+            self.radix.insert(key_to_insert, Some(hnsw_node_index));
+        }
 
+        self.records.push(item);
         true
     }
 
-    /// Performs an approximate k-NN search. If `radix_key` is provided and found in the Radix Tree,
-    /// it jumps directly to the HNSW node to retrieve neighbors, bypassing full traversal.
+    /// Performs an approximate k-NN search. If the `MetricId` natively maps to a Radix Tree key 
+    /// (e.g. TLSH string), it jumps directly to the HNSW node to retrieve neighbors, bypassing full traversal.
     /// Otherwise, it performs a standard HNSW k-NN search using the `query`.
     ///
     /// # Parameters
     /// * `query` - The native HNSW numerical or hash representation
-    /// * `radix_key` - Optional exact-match key to attempt Radix-based shortcut
     /// * `k` - Number of nearest neighbors to return
     ///
     /// # Returns
@@ -81,14 +80,13 @@ where
     pub fn search(
         &self,
         query: &R::MetricId,
-        radix_key: Option<&str>,
         k: usize,
         ef_search: Option<usize>,
     ) -> Vec<(u32, &R)> {
         let ef_search = ef_search.unwrap_or(24);
 
-        let hnsw_results: Vec<(u32, usize, &R::MetricId)> = if let Some(key) = radix_key {
-            if let Some(radix_node) = self.radix.find(key.as_bytes()) {
+        let hnsw_results: Vec<(u32, usize, &R::MetricId)> = if let Some(key) = query.to_radix_key() {
+            if let Some(radix_node) = self.radix.find(&key) {
                 if let Some(Some(node_index)) = radix_node.data {
                     // Exact match found! Jump directly to neighbors in HNSW
                     self.hnsw.get_neighbors_node(node_index)

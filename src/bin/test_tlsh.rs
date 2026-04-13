@@ -54,7 +54,7 @@ pub fn main() {
         "T1008100007FFA5C48F0F33EB5AEB455158576FE205AB2CA6D51A4828F24B2B408961F3B",
     )
     .unwrap();
-    let result = apotheosis.search(&query_hash, None, 1, None);
+    let result = apotheosis.search(&query_hash, 1, None);
     println!("Distance: {}", result[0].0);
     let creation_time: std::time::Duration = creation_start.elapsed();
 
@@ -92,7 +92,7 @@ pub fn main() {
 
     for n in &queries {
         let record_hash = TlshDefault::from_str(n).unwrap();
-        let results = apotheosis.search(&record_hash, None, 42, None);
+        let results = apotheosis.search(&record_hash, 42, None);
         apo_results.push((results[0].0, results[0].1.search_id()));
     }
 

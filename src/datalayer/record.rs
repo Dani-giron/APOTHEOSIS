@@ -1,13 +1,32 @@
 use std::str::FromStr;
 use tlsh2::TlshDefault;
 
+/// Trait for Metric types (like TLSH or numerical IDs) to specify if they natively map to a Radix Tree exact-match key.
+pub trait RadixKeyMapping {
+    fn to_radix_key(&self) -> Option<Vec<u8>> {
+        None
+    }
+}
+
+impl RadixKeyMapping for TlshDefault {
+    fn to_radix_key(&self) -> Option<Vec<u8>> {
+        Some(self.hash().to_vec())
+    }
+}
+
+impl RadixKeyMapping for u32 {
+    fn to_radix_key(&self) -> Option<Vec<u8>> {
+        Some(self.to_string().into_bytes())
+    }
+}
+
 /// The primary trait for any entity inserted into the Apotheosis Database.
 /// Implement this trait on domain objects to define how they should be indexed
 /// by the Radix exact-match tree and the HNSW proximity graph.
 pub trait ApotheosisRecord {
-    type MetricId: Clone; // The mathematical/hashing space representation used by HNSW. E.g., `tlsh2::TlshDefault` or `u32`.
-    fn radix_key(&self) -> Vec<u8>; // The exact-match string identifier used in the Radix Tree.
+    type MetricId: Clone + RadixKeyMapping; // The mathematical/hashing space representation used by HNSW. E.g., `tlsh2::TlshDefault` or `u32`.
     fn search_id(&self) -> Self::MetricId; // The metric representation (e.g., hash) used for similarity calculation in the HNSW graph.
+
     fn get_attributes(&self) -> Vec<(String, String)> {
         // Optional metadata key-value pairs associated with the ApotheosisRecord. These are exported during model visualization (GEXF).
         vec![]
@@ -24,10 +43,6 @@ pub struct SimpleRecord<ID> {
 
 impl<ID: Clone> ApotheosisRecord for SimpleRecord<ID> {
     type MetricId = ID;
-
-    fn radix_key(&self) -> Vec<u8> {
-        self.radix_key.clone().into_bytes()
-    }
 
     fn search_id(&self) -> Self::MetricId {
         self.id.clone()
@@ -76,10 +91,6 @@ pub struct WinModuleRecord {
 impl ApotheosisRecord for WinModuleRecord {
     type MetricId = TlshDefault;
 
-    fn radix_key(&self) -> Vec<u8> {
-        self.internal_filename.clone().into_bytes()
-    }
-
     fn search_id(&self) -> Self::MetricId {
         self.hash.clone()
     }
@@ -107,10 +118,6 @@ pub struct BinaryRecord {
 impl ApotheosisRecord for BinaryRecord {
     type MetricId = TlshDefault;
 
-    fn radix_key(&self) -> Vec<u8> {
-        self.hash.hash().to_vec()
-    }
-
     fn search_id(&self) -> Self::MetricId {
         self.hash.clone() // Simplified dummy behavior for tests
     }
@@ -134,10 +141,6 @@ pub struct OpenWrtRecord {
 
 impl ApotheosisRecord for OpenWrtRecord {
     type MetricId = TlshDefault;
-
-    fn radix_key(&self) -> Vec<u8> {
-        self.hash.hash().to_vec()
-    }
 
     fn search_id(&self) -> Self::MetricId {
         self.hash.clone()
