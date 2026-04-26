@@ -41,7 +41,7 @@ pub struct SimpleRecord<ID> {
     pub radix_key: String,
 }
 
-impl<ID: Clone> ApotheosisRecord for SimpleRecord<ID> {
+impl<ID: Clone + RadixKeyMapping> ApotheosisRecord for SimpleRecord<ID> {
     type MetricId = ID;
 
     fn search_id(&self) -> Self::MetricId {

@@ -6,7 +6,7 @@
 use crate::controllers::hnsw::Hnsw;
 use crate::controllers::radix_tree::RadixNode;
 use crate::datalayer::algorithms::DistanceAlgorithm;
-use crate::datalayer::record::ApotheosisRecord;
+use crate::datalayer::record::{ApotheosisRecord, RadixKeyMapping};
 use gexf::{Edge, EdgeType, Gexf, Node as GefxNode};
 use std::fs::{self};
 use std::path::{Path, PathBuf};
