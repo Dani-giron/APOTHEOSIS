@@ -1,5 +1,5 @@
 use std::str::FromStr;
-use tlsh2::TlshDefault;
+use tlsh2::{Tlsh, TlshDefault};
 
 /// Trait for Metric types (like TLSH or numerical IDs) to specify if they natively map to a Radix Tree exact-match key.
 pub trait RadixKeyMapping {
@@ -66,6 +66,49 @@ impl SimpleTlshRecord {
     }
 }
 
+// TLSH node that accepts any JSON as metadata
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+pub struct GenericJsonRecord {
+    pub id: TlshDefault,
+    pub radix_key: String,
+    pub metadata: serde_json::Value,
+}
+
+impl ApotheosisRecord for GenericJsonRecord {
+    type MetricId = TlshDefault;
+
+    fn search_id(&self) -> Self::MetricId {
+        self.id.clone()
+    }
+
+    fn get_attributes(&self) -> Vec<(String, String)> {
+        if let Some(obj) = self.metadata.as_object() {
+            obj.iter()
+                .map(|(k, v)| {
+                    let val_str = match v {
+                        serde_json::Value::String(s) => s.clone(),
+                        _ => v.to_string(),
+                    };
+                    (k.clone(), val_str)
+                })
+                .collect()
+        } else {
+            vec![("metadata".to_string(), self.metadata.to_string())]
+        }
+    }
+}
+
+impl GenericJsonRecord {
+    pub fn create(s: String, metadata: serde_json::Value) -> Self {
+        let id = TlshDefault::from_str(&s).unwrap();
+        Self {
+            id,
+            radix_key: s,
+            metadata,
+        }
+    }
+}
+
 // Example/Existing Implementations
 
 pub struct FileRecord {
@@ -124,25 +167,5 @@ impl ApotheosisRecord for BinaryRecord {
 
     fn get_attributes(&self) -> Vec<(String, String)> {
         vec![("version_names".to_string(), "".to_string())]
-    }
-}
-
-#[derive(Debug)]
-pub struct OpenWrt {
-    pub version: String,
-    pub binary: String,
-    pub function_name: String,
-}
-
-pub struct OpenWrtRecord {
-    pub hash: TlshDefault,
-    pub data: Vec<OpenWrt>,
-}
-
-impl ApotheosisRecord for OpenWrtRecord {
-    type MetricId = TlshDefault;
-
-    fn search_id(&self) -> Self::MetricId {
-        self.hash.clone()
     }
 }

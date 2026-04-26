@@ -8,7 +8,8 @@ use crate::controllers::radix_tree::RadixNode;
 use crate::datalayer::algorithms::DistanceAlgorithm;
 use crate::datalayer::record::{ApotheosisRecord, RadixKeyMapping};
 use gexf::{Edge, EdgeType, Gexf, Node as GefxNode};
-use std::fs::{self};
+use std::fs::{self, File};
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -65,7 +66,7 @@ where
         true
     }
 
-    /// Performs an approximate k-NN search. If the `MetricId` natively maps to a Radix Tree key 
+    /// Performs an approximate k-NN search. If the `MetricId` natively maps to a Radix Tree key
     /// (e.g. TLSH string), it jumps directly to the HNSW node to retrieve neighbors, bypassing full traversal.
     /// Otherwise, it performs a standard HNSW k-NN search using the `query`.
     ///
@@ -85,7 +86,8 @@ where
     ) -> Vec<(u32, &R)> {
         let ef_search = ef_search.unwrap_or(24);
 
-        let hnsw_results: Vec<(u32, usize, &R::MetricId)> = if let Some(key) = query.to_radix_key() {
+        let hnsw_results: Vec<(u32, usize, &R::MetricId)> = if let Some(key) = query.to_radix_key()
+        {
             if let Some(radix_node) = self.radix.find(&key) {
                 if let Some(Some(node_index)) = radix_node.data {
                     // Exact match found! Jump directly to neighbors in HNSW
@@ -106,23 +108,49 @@ where
             .collect()
     }
 
-    /// Dumps the Apotheosis model to a binary file using Bincode.
     pub fn dump<P: AsRef<Path>>(&self, path: P) -> Result<(), Box<dyn std::error::Error>>
     where
         Self: serde::Serialize,
     {
-        let encoded = bincode::serialize(self)?;
-        fs::write(path, encoded)?;
+        let mut file = File::create(path)?;
+        // Write magic bytes: "APOT" (4 bytes)
+        file.write_all(b"APOT")?;
+        // Write M, M0, EF as u32 (12 bytes)
+        file.write_all(&(M as u32).to_le_bytes())?;
+        file.write_all(&(M0 as u32).to_le_bytes())?;
+        file.write_all(&(EF as u32).to_le_bytes())?;
+
+        // Then write the model data
+        bincode::serialize_into(file, self)?;
         Ok(())
     }
 
-    /// Loads an Apotheosis model from a binary file using Bincode.
     pub fn load<P: AsRef<Path>>(path: P) -> Result<Self, Box<dyn std::error::Error>>
     where
         Self: serde::de::DeserializeOwned,
     {
-        let data = fs::read(path)?;
-        let decoded = bincode::deserialize(&data)?;
+        let mut file = File::open(path)?;
+
+        // Read and verify header (16 bytes)
+        let mut header = [0u8; 16];
+        file.read_exact(&mut header)?;
+
+        if &header[0..4] != b"APOT" {
+            return Err("Invalid Apotheosis model file (missing magic bytes)".into());
+        }
+
+        let m = u32::from_le_bytes(header[4..8].try_into()?);
+        let m0 = u32::from_le_bytes(header[8..12].try_into()?);
+        let ef = u32::from_le_bytes(header[12..16].try_into()?);
+
+        if m != M as u32 || m0 != M0 as u32 || ef != EF as u32 {
+            return Err(format!(
+                "Model parameter mismatch. File has M={}, M0={}, EF={} but code expects M={}, M0={}, EF={}",
+                m, m0, ef, M, M0, EF
+            ).into());
+        }
+
+        let decoded = bincode::deserialize_from(file)?;
         Ok(decoded)
     }
 
