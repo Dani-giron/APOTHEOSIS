@@ -37,7 +37,7 @@ pub fn main() {
     let dataset: Vec<String> = hashes[..60000].to_vec();
     let dataset_copy: Vec<String> = dataset.clone();
     let queries: Vec<String> = hashes[1000000..1001000].to_vec();
-    let mut apotheosis = Apotheosis::<SimpleTlshRecord, TlshDistance, 32, 64, 64>::new();
+    let mut apotheosis = Apotheosis::<SimpleTlshRecord, TlshDistance, 32, 64, 64, true>::new();
     let creation_start: Instant = Instant::now();
 
     println!(

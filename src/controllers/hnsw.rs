@@ -16,7 +16,7 @@ fn default_rng() -> StdRng {
     serialize = "ID: serde::Serialize, D: DistanceAlgorithm<ID> + serde::Serialize",
     deserialize = "ID: serde::Deserialize<'de>, D: DistanceAlgorithm<ID> + serde::Deserialize<'de>"
 ))]
-pub struct Hnsw<D, ID, const M: usize, const M0: usize, const EF: usize = 400>
+pub struct Hnsw<D, ID, const M: usize, const M0: usize, const EF: usize = 400, const HEURISTIC: bool = false>
 where
     D: DistanceAlgorithm<ID> + Default,
 {
@@ -28,7 +28,7 @@ where
     distance: D,
 }
 
-impl<D, ID, const M: usize, const M0: usize, const EF: usize> Hnsw<D, ID, M, M0, EF>
+impl<D, ID, const M: usize, const M0: usize, const EF: usize, const HEURISTIC: bool> Hnsw<D, ID, M, M0, EF, HEURISTIC>
 where
     D: DistanceAlgorithm<ID> + Default,
 {
@@ -97,7 +97,11 @@ where
                 layer_ix,
                 knn_neighbors.len()
             );
-            self.add_node(&mut knn_neighbors, Some(layer_ix));
+            if HEURISTIC {
+                self.add_node_heuristic(&mut knn_neighbors, Some(layer_ix));
+            } else {
+                self.add_node(&mut knn_neighbors, Some(layer_ix));
+            }
             let (nearest_neighbor_index, nearest_neighbor_distance) =
                 knn_neighbors.first().unwrap();
             enter_point = self.upper_layers[layer_ix][*nearest_neighbor_index].next_node as usize;
@@ -113,7 +117,11 @@ where
             EF,
             &mut visited_neighbors,
         );
-        self.add_node(&mut knn_neighbors, None);
+        if HEURISTIC {
+            self.add_node_heuristic(&mut knn_neighbors, None);
+        } else {
+            self.add_node(&mut knn_neighbors, None);
+        }
 
         // Create new layers up to new_level
         while self.upper_layers.len() < insertion_level {
@@ -229,6 +237,111 @@ where
         }
     }
 
+    /// Selects up to `max_neighbors` (heuristic).
+    /// Each candidate is (node_index, feature_index, distance).
+    /// Returns (node_index, distance) pairs for the selected neighbors.
+    #[inline]
+    fn select_neighbors_heuristic(
+        &self,
+        candidates: &[(u32, usize, u32)],
+        max_neighbors: usize,
+    ) -> Vec<(u32, u32)> {
+        let mut new_confirmed_neighbors: Vec<(u32, usize, u32)> = Vec::with_capacity(max_neighbors);
+
+        // Iterate each neighbor to see who's a better link. Our new node, or some of the new neighbors?
+        for &(cand_node, candidate_feature_idx, candidate_distance) in candidates {
+            // Greedy set cover, this is, we only check candidate against ALREADY-SELECTED (confirmed) neighbors
+            let is_new_node_best_candidate = new_confirmed_neighbors.iter().all(|&(_, selected_feature_idx, _)| { 
+                self.distance.calculate_distance(
+                    &self.features[candidate_feature_idx],
+                    &self.features[selected_feature_idx],
+                ) >= candidate_distance
+            });
+
+            if is_new_node_best_candidate { // The node we are inserting is the best link
+                new_confirmed_neighbors.push((cand_node, candidate_feature_idx, candidate_distance));
+                if new_confirmed_neighbors.len() == max_neighbors {
+                    break;
+                }
+            } // Else, some of the other neighbors is better than us (and will be linked to it later)!
+        }
+
+        new_confirmed_neighbors.iter().map(|&(node, _, dist)| (node, dist)).collect()
+    }
+
+    #[inline]
+    fn add_node_heuristic(&mut self, new_neighbors: &mut Vec<(usize, u32)>, layer_idx: Option<usize>) {
+        let new_feature_idx = self.features.len() - 1;
+
+        let new_node_index = match layer_idx {
+            Some(idx) => self.upper_layers[idx].len() as u32,
+            None => self.zero_layer.len() as u32,
+        };
+
+        
+        let candidates: Vec<(u32, usize, u32)> = new_neighbors // (neighbor_idx, feature_idx, distance)
+            .iter()
+            .map(|&(node, dist)| {
+                let feature = match layer_idx {
+                    Some(idx) => self.upper_layers[idx][node].feature_index as usize,
+                    None => self.zero_layer[node].feature_index as usize,
+                };
+                (node as u32, feature, dist)
+            })
+            .collect();
+
+        let max_neighbors = if layer_idx.is_some() { M } else { M0 };
+        let selected = self.select_neighbors_heuristic(&candidates, max_neighbors);
+
+        // Node construction and insertion differ by the layer we are (HnswNode<M> vs HnswNode<M0>)
+        match layer_idx {
+            Some(idx) => {
+                let mut neighbors = [!0u32; M];
+                let mut neighbor_distances = [!0u32; M];
+                for (i, &(node, dist)) in selected.iter().enumerate() {
+                    neighbors[i] = node;
+                    neighbor_distances[i] = dist;
+                }
+
+                let next_node = if idx == 0 {
+                    self.zero_layer.len() as u32
+                } else {
+                    self.upper_layers[idx - 1].len() as u32
+                };
+
+                self.upper_layers[idx].push(HnswNode {
+                    feature_index: new_feature_idx as u32,
+                    next_node,
+                    neighbors,
+                    neighbor_distances,
+                    neighbor_count: selected.len() as u16,
+                });
+
+                let selected_as_usize: Vec<(usize, u32)> = selected.iter().map(|&(n, d)| (n as usize, d)).collect();
+                self.connect_neighbors_heuristic(new_node_index, &selected_as_usize, Some(idx));
+            }
+            None => {
+                let mut neighbors = [!0u32; M0];
+                let mut neighbor_distances = [!0u32; M0];
+                for (i, &(node, dist)) in selected.iter().enumerate() {
+                    neighbors[i] = node;
+                    neighbor_distances[i] = dist;
+                }
+
+                self.zero_layer.push(HnswNode {
+                    feature_index: new_feature_idx as u32,
+                    next_node: 0,
+                    neighbors,
+                    neighbor_distances,
+                    neighbor_count: selected.len() as u16,
+                });
+
+                let selected_as_usize: Vec<(usize, u32)> = selected.iter().map(|&(n, d)| (n as usize, d)).collect();
+                self.connect_neighbors_heuristic(new_node_index, &selected_as_usize, None);
+            }
+        }
+    }
+
     // Connects a single node to its new selected neighbors.
     // If the neighbor list is full, select only better candidates.
     #[inline]
@@ -243,12 +356,12 @@ where
                 for &(neighbor_idx, new_distance) in new_neighbors {
                     let neighbor_node = &mut self.upper_layers[idx][neighbor_idx];
 
-                    if (neighbor_node.neighbor_count as usize) < M {
+                    if (neighbor_node.neighbor_count as usize) < M { // We have space on the neighbor's list. Just add it.
                         let slot = neighbor_node.neighbor_count as usize;
                         neighbor_node.neighbors[slot] = new_node_index;
                         neighbor_node.neighbor_distances[slot] = new_distance;
                         neighbor_node.neighbor_count += 1;
-                    } else {
+                    } else { // Neighbor list is full, replace it with the farest one
                         let (worst_ix, worst_distance) = neighbor_node
                             .active_distances()
                             .iter()
@@ -256,66 +369,7 @@ where
                             .max_by_key(|&(_, &distance)| distance)
                             .unwrap();
 
-                        if new_distance < *worst_distance {
-                            neighbor_node.neighbors[worst_ix] = new_node_index;
-                            neighbor_node.neighbor_distances[worst_ix] = new_distance;
-                        }
-                    }
-                }
-            }
-            None => {
-                for &(neighbor_idx, new_distance) in new_neighbors {
-                    let neighbor_node = &mut self.zero_layer[neighbor_idx];
-
-                    if (neighbor_node.neighbor_count as usize) < M0 {
-                        let slot = neighbor_node.neighbor_count as usize;
-                        neighbor_node.neighbors[slot] = new_node_index;
-                        neighbor_node.neighbor_distances[slot] = new_distance;
-                        neighbor_node.neighbor_count += 1;
-                    } else {
-                        let (worst_ix, worst_distance) = neighbor_node
-                            .active_distances()
-                            .iter()
-                            .enumerate()
-                            .max_by_key(|&(_, &distance)| distance)
-                            .unwrap();
-
-                        if new_distance < *worst_distance {
-                            neighbor_node.neighbors[worst_ix] = new_node_index;
-                            neighbor_node.neighbor_distances[worst_ix] = new_distance;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // WIP
-    fn connect_neighbors_heuristic(
-        &mut self,
-        new_node_index: u32,
-        new_neighbors: &[(usize, u32)],
-        layer_idx: Option<usize>,
-    ) {
-        match layer_idx {
-            Some(idx) => {
-                for &(neighbor_idx, new_distance) in new_neighbors {
-                    let neighbor_node = &mut self.upper_layers[idx][neighbor_idx];
-
-                    if (neighbor_node.neighbor_count as usize) < M {
-                        let slot = neighbor_node.neighbor_count as usize;
-                        neighbor_node.neighbors[slot] = new_node_index;
-                        neighbor_node.neighbor_distances[slot] = new_distance;
-                        neighbor_node.neighbor_count += 1;
-                    } else {
-                        let (worst_ix, worst_distance) = neighbor_node
-                            .active_distances()
-                            .iter()
-                            .enumerate()
-                            .max_by_key(|&(_, &distance)| distance)
-                            .unwrap();
-
-                        if new_distance < *worst_distance {
+                        if new_distance < *worst_distance { // Bidirecionally connect the nodes ONLY if we have space
                             neighbor_node.neighbors[worst_ix] = new_node_index;
                             neighbor_node.neighbor_distances[worst_ix] = new_distance;
                         }
@@ -350,9 +404,78 @@ where
     }
 
     #[inline]
+    fn connect_neighbors_heuristic(
+        &mut self,
+        new_node_index: u32,
+        new_neighbors: &[(usize, u32)],
+        layer_idx: Option<usize>,
+    ) {
+        let new_node_feature_idx = self.features.len() - 1;
+        let max_neighbors = if layer_idx.is_some() { M } else { M0 };
+
+        for &(neighbor_idx, new_distance) in new_neighbors {
+            let neighbor_count = match layer_idx {
+                Some(idx) => self.upper_layers[idx][neighbor_idx].neighbor_count as usize,
+                None => self.zero_layer[neighbor_idx].neighbor_count as usize,
+            };
+
+            let mut candidates: Vec<(u32, usize, u32)> = Vec::with_capacity(max_neighbors + 1);
+
+            // Retrieve all new neighbors with its distances to the new node to later heuristic compare.
+            for i in 0..neighbor_count {
+                let (node, distance_to_new_node) = match layer_idx {
+                    Some(idx) => (
+                        self.upper_layers[idx][neighbor_idx].neighbors[i],
+                        self.upper_layers[idx][neighbor_idx].neighbor_distances[i],
+                    ),
+                    None => (
+                        self.zero_layer[neighbor_idx].neighbors[i],
+                        self.zero_layer[neighbor_idx].neighbor_distances[i],
+                    ),
+                };
+
+                let feature: usize = match layer_idx {
+                        Some(idx) => self.upper_layers[idx][node as usize].feature_index as usize,
+                        None => self.zero_layer[node as usize].feature_index as usize,
+                    };
+                
+                candidates.push((node, feature, distance_to_new_node));
+            }
+            // We also include the new node. 
+            candidates.push((new_node_index, new_node_feature_idx, new_distance));
+            candidates.sort_by_key(|&(_, _, d)| d); // claude says we need this, but i'm not 100% sure...
+
+
+            // Now, evaluate each new neighbor's neighbor list VS. the new node, BUT WITH HEURISTIC!
+            // Second time we call here and some ops may be redundant, could this be cached somehow or i'm just rambling?
+            let selected = self.select_neighbors_heuristic(&candidates, max_neighbors);
+
+            // Replace the old neighbors list with the new one
+            match layer_idx {
+                Some(idx) => {
+                    let neighbor_node = &mut self.upper_layers[idx][neighbor_idx];
+                    for (i, &(node, dist)) in selected.iter().enumerate() {
+                        neighbor_node.neighbors[i] = node;
+                        neighbor_node.neighbor_distances[i] = dist;
+                    }
+                    neighbor_node.neighbor_count = selected.len() as u16;
+                }
+                None => {
+                    let neighbor_node = &mut self.zero_layer[neighbor_idx];
+                    for (i, &(node, dist)) in selected.iter().enumerate() {
+                        neighbor_node.neighbors[i] = node;
+                        neighbor_node.neighbor_distances[i] = dist;
+                    }
+                    neighbor_node.neighbor_count = selected.len() as u16;
+                }
+            }
+        }
+    }
+
+    #[inline]
     fn search_upper_layers(
         &self,
-        feature: &ID,
+        query_feature: &ID,
         (enter_point, score): (usize, u32),
         ef: usize,
         layer_idx: usize,
@@ -366,29 +489,31 @@ where
                 "[S1] Exploring neighbors from candidate node {} at layer 0.",
                 candidate
             );
+            // Get neighbors from the candidate
             let neighbors = self.upper_layers[layer_idx - 1][candidate].active_neighbors();
 
             for neighbor in neighbors {
-                let neighbor_feature_index: usize =
+                let neighbor_feature_index: usize = // Get the current neighbor's feature index
                     self.upper_layers[layer_idx - 1][*neighbor as usize].feature_index as usize;
                 debug!("    [S2] Exploring neighbor: {:?}", neighbor);
 
-                if visited_neighbors.insert(neighbor_feature_index) {
+                if visited_neighbors.insert(neighbor_feature_index) { // We have NOT visited the current neighbor
                     let score = self
                         .distance
-                        .calculate_distance(&self.features[neighbor_feature_index], feature);
+                        .calculate_distance(&self.features[neighbor_feature_index], query_feature);
 
-                    let pos = currently_found_nearest_neighbors.partition_point(|n| n.1 <= score);
-                    if pos != ef {
+                    
+                    let position = currently_found_nearest_neighbors.partition_point(|n| n.1 <= score);
+                    if position != ef { // Found a closer neighbor for our CFNN
                         debug!(
                             "     [S3] CFNN Updated! New neighbor: {:?} at pos {}. Distance is: {:?}",
-                            *neighbor, pos, score
+                            *neighbor, position, score
                         );
-                        if currently_found_nearest_neighbors.len() == ef {
+                        if currently_found_nearest_neighbors.len() == ef { // List is full, remove the latest one
                             currently_found_nearest_neighbors.pop();
                         }
-                        currently_found_nearest_neighbors.insert(pos, (*neighbor as usize, score));
-                        candidates.push(*neighbor as usize);
+                        currently_found_nearest_neighbors.insert(position, (*neighbor as usize, score));
+                        candidates.push(*neighbor as usize); // New CFNN candidate to explore in the next iterations...
                     }
                 }
             }
@@ -400,7 +525,7 @@ where
     #[inline]
     fn search_layer_zero(
         &self,
-        feature: &ID,
+        query_feature: &ID,
         (enter_point, score): (usize, u32),
         ef: usize,
         visited_neighbors: &mut HashSet<usize>,
@@ -422,7 +547,7 @@ where
                 if visited_neighbors.insert(neighbor_feature_index) {
                     let score = self
                         .distance
-                        .calculate_distance(&self.features[neighbor_feature_index], feature);
+                        .calculate_distance(&self.features[neighbor_feature_index], query_feature);
 
                     let pos = currently_found_nearest_neighbors.partition_point(|n| n.1 <= score);
                     if pos != ef {
