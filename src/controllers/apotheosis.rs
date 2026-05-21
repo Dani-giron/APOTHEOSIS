@@ -20,7 +20,8 @@ use std::path::{Path, PathBuf};
 pub struct Apotheosis<R, D, const M: usize = 16, const M0: usize = 32, const EF: usize = 400, const HEURISTIC: bool = false>
 where
     R: ApotheosisRecord,
-    D: DistanceAlgorithm<R::MetricId> + Default,
+    D: DistanceAlgorithm<R::MetricId> + Default + Sync,
+    R::MetricId: Sync,
 {
     pub hnsw: Hnsw<D, R::MetricId, M, M0, EF, HEURISTIC>,
     pub radix: RadixNode<u8, Option<usize>>,
@@ -30,7 +31,8 @@ where
 impl<R, D, const M: usize, const M0: usize, const EF: usize, const HEURISTIC: bool> Apotheosis<R, D, M, M0, EF, HEURISTIC>
 where
     R: ApotheosisRecord,
-    D: DistanceAlgorithm<R::MetricId> + Default,
+    D: DistanceAlgorithm<R::MetricId> + Default + Sync,
+    R::MetricId: Sync,
 {
     pub fn new() -> Self {
         Self {

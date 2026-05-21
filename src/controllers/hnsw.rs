@@ -3,6 +3,7 @@ use crate::datalayer::nodes::HnswNode;
 use core::cmp::min;
 use rand::rngs::StdRng;
 use rand::{RngCore, SeedableRng};
+use rayon::prelude::*;
 use std::cmp;
 use std::collections::HashSet;
 use tracing::debug;
@@ -30,7 +31,8 @@ where
 
 impl<D, ID, const M: usize, const M0: usize, const EF: usize, const HEURISTIC: bool> Hnsw<D, ID, M, M0, EF, HEURISTIC>
 where
-    D: DistanceAlgorithm<ID> + Default,
+    D: DistanceAlgorithm<ID> + Default + Sync,
+    ID: Sync,
 {
     pub fn new() -> Self {
         Self {
@@ -489,32 +491,39 @@ where
                 "[S1] Exploring neighbors from candidate node {} at layer 0.",
                 candidate
             );
-            // Get neighbors from the candidate
             let neighbors = self.upper_layers[layer_idx - 1][candidate].active_neighbors();
 
-            for neighbor in neighbors {
-                let neighbor_feature_index: usize = // Get the current neighbor's feature index
-                    self.upper_layers[layer_idx - 1][*neighbor as usize].feature_index as usize;
-                debug!("    [S2] Exploring neighbor: {:?}", neighbor);
-
-                if visited_neighbors.insert(neighbor_feature_index) { // We have NOT visited the current neighbor
-                    let score = self
-                        .distance
-                        .calculate_distance(&self.features[neighbor_feature_index], query_feature);
-
-                    
-                    let position = currently_found_nearest_neighbors.partition_point(|n| n.1 <= score);
-                    if position != ef { // Found a closer neighbor for our CFNN
-                        debug!(
-                            "     [S3] CFNN Updated! New neighbor: {:?} at pos {}. Distance is: {:?}",
-                            *neighbor, position, score
-                        );
-                        if currently_found_nearest_neighbors.len() == ef { // List is full, remove the latest one
-                            currently_found_nearest_neighbors.pop();
-                        }
-                        currently_found_nearest_neighbors.insert(position, (*neighbor as usize, score));
-                        candidates.push(*neighbor as usize); // New CFNN candidate to explore in the next iterations...
+            // Filter unvisited neighbors (cheap sequential step)
+            let unvisited: Vec<(u32, usize)> = neighbors
+                .iter()
+                .filter_map(|&neighbor| {
+                    let feature_idx = self.upper_layers[layer_idx - 1][neighbor as usize].feature_index as usize;
+                    if visited_neighbors.insert(feature_idx) {
+                        Some((neighbor, feature_idx))
+                    } else {
+                        None
                     }
+                })
+                .collect();
+
+            // Compute distances in parallel (expensive step)
+            let scores: Vec<(u32, usize, u32)> = unvisited
+                .par_iter()
+                .map(|&(neighbor, feature_idx)| {
+                    let score = self.distance.calculate_distance(&self.features[feature_idx], query_feature);
+                    (neighbor, feature_idx, score)
+                })
+                .collect();
+
+            // Update CFNN sequentially
+            for (neighbor, _feature_idx, score) in scores {
+                let position = currently_found_nearest_neighbors.partition_point(|n| n.1 <= score);
+                if position != ef {
+                    if currently_found_nearest_neighbors.len() == ef {
+                        currently_found_nearest_neighbors.pop();
+                    }
+                    currently_found_nearest_neighbors.insert(position, (neighbor as usize, score));
+                    candidates.push(neighbor as usize);
                 }
             }
         }
@@ -540,27 +549,37 @@ where
             );
             let neighbors = self.zero_layer[candidate].active_neighbors();
 
-            for neighbor in neighbors {
-                let neighbor_feature_index: usize = *neighbor as usize;
-                debug!("    [S2] Exploring neighbor: {:?}", neighbor);
-
-                if visited_neighbors.insert(neighbor_feature_index) {
-                    let score = self
-                        .distance
-                        .calculate_distance(&self.features[neighbor_feature_index], query_feature);
-
-                    let pos = currently_found_nearest_neighbors.partition_point(|n| n.1 <= score);
-                    if pos != ef {
-                        debug!(
-                            "    [S3] CFNN Updated! New neighbor: {:?} at pos {}. Distance is: {:?}",
-                            *neighbor, pos, score
-                        );
-                        if currently_found_nearest_neighbors.len() == ef {
-                            currently_found_nearest_neighbors.pop();
-                        }
-                        currently_found_nearest_neighbors.insert(pos, (*neighbor as usize, score));
-                        candidates.push(*neighbor as usize);
+            // Filter unvisited neighbors (cheap sequential step)
+            let unvisited: Vec<(u32, usize)> = neighbors
+                .iter()
+                .filter_map(|&neighbor| {
+                    let feature_idx = neighbor as usize;
+                    if visited_neighbors.insert(feature_idx) {
+                        Some((neighbor, feature_idx))
+                    } else {
+                        None
                     }
+                })
+                .collect();
+
+            // Compute distances in parallel (expensive step)
+            let scores: Vec<(u32, usize, u32)> = unvisited
+                .par_iter()
+                .map(|&(neighbor, feature_idx)| {
+                    let score = self.distance.calculate_distance(&self.features[feature_idx], query_feature);
+                    (neighbor, feature_idx, score)
+                })
+                .collect();
+
+            // Update CFNN sequentially
+            for (neighbor, _feature_idx, score) in scores {
+                let position = currently_found_nearest_neighbors.partition_point(|n| n.1 <= score);
+                if position != ef {
+                    if currently_found_nearest_neighbors.len() == ef {
+                        currently_found_nearest_neighbors.pop();
+                    }
+                    currently_found_nearest_neighbors.insert(position, (neighbor as usize, score));
+                    candidates.push(neighbor as usize);
                 }
             }
         }
