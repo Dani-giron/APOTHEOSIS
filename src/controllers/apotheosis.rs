@@ -186,40 +186,12 @@ where
                         source_id.clone(),
                         target_id.clone(),
                     )
-                    .with_weight(distance.clone()),
+                    .with_weight(-distance.clone()),
                 );
             }
 
             let _ = self.save_gexf(base_path, layer_idx, &gexf);
         }
-    }
-
-    // Once draw is built, we need to add the attribute schema to the GEXF XML
-    // Has to be done manually since gexf crate does not support it yet.
-    fn add_attribute_schema(&self, xml: String, attributes: Vec<(String, String)>) -> String {
-        if let Some(graph_start) = xml.find("<graph") {
-            if let Some(graph_end_offset) = xml[graph_start..].find(">") {
-                let insert_pos = graph_start + graph_end_offset + 1;
-
-                let mut attrs = String::from("\n    <attributes class=\"node\">\n");
-                for (attribute_key, _) in attributes {
-                    attrs.push_str(&format!(
-                        "      <attribute id=\"{}\" title=\"{}\" type=\"string\"/>\n",
-                        attribute_key, attribute_key
-                    ));
-                }
-                attrs.push_str("    </attributes>\n");
-
-                let mut result = String::new();
-                result.push_str(&xml[..insert_pos]);
-                result.push_str(&attrs);
-                result.push_str(&xml[insert_pos..]);
-
-                return result;
-            }
-        }
-
-        xml
     }
 
     fn save_gexf(&self, base_path: &Path, layer_idx: usize, gexf: &Gexf) -> std::io::Result<()> {
@@ -234,12 +206,7 @@ where
             file_path = PathBuf::from(filename);
         }
 
-        let fixed_xml = if !self.records.is_empty() {
-            self.add_attribute_schema(gexf.to_string().unwrap(), self.records[0].get_attributes())
-        } else {
-            gexf.to_string().unwrap()
-        };
-
+        let fixed_xml = gexf.to_string().unwrap();
         fs::write(file_path, fixed_xml)?;
         Ok(())
     }
