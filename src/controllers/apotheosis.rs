@@ -51,15 +51,18 @@ where
     /// * `true` if the record was successfully inserted
     /// * `false` if the record's key already exists in the model
     pub fn insert(&mut self, item: R) -> bool {
-        let hnsw_node_index = self.hnsw.insert(item.search_id());
+        let radix_key = item.search_id().to_radix_key();
 
-        // Only insert into the Radix fast-path if the metric natively maps to a string key
-        if let Some(key_to_insert) = item.search_id().to_radix_key() {
-            if self.radix.find(&key_to_insert).is_some() {
-                println!("Key already exists in radix tree: {:?}", key_to_insert);
+        if let Some(ref key) = radix_key {
+            if self.radix.find(key).is_some() {
+                println!("Key already exists in radix tree: {:?}", key);
                 return false;
             }
-            self.radix.insert(key_to_insert, Some(hnsw_node_index));
+        }
+
+        let hnsw_node_index = self.hnsw.insert(item.search_id());
+        if let Some(key) = radix_key {
+            self.radix.insert(key, Some(hnsw_node_index));
         }
 
         self.records.push(item);
