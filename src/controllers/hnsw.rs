@@ -1,9 +1,11 @@
 use crate::datalayer::algorithms::DistanceAlgorithm;
 use crate::datalayer::nodes::HnswNode;
 use core::cmp::min;
+use core::cmp::Reverse;
 use rand::rngs::StdRng;
 use rand::{RngCore, SeedableRng};
 use std::cmp;
+use std::collections::BinaryHeap;
 use std::collections::HashSet;
 use tracing::debug;
 
@@ -481,10 +483,20 @@ where
         layer_idx: usize,
         visited_neighbors: &mut HashSet<usize>,
     ) -> Vec<(usize, u32)> {
-        let mut candidates: Vec<usize> = vec![enter_point];
-        let mut currently_found_nearest_neighbors: Vec<(usize, u32)> = vec![(enter_point, score)];
+        let mut candidates: BinaryHeap<Reverse<(u32, usize)>> = BinaryHeap::with_capacity(ef); // Min heap
+        candidates.push(Reverse((score, enter_point)));
+        let mut currently_found_nearest_neighbors: BinaryHeap<(u32, usize)> = 
+            BinaryHeap::with_capacity(ef + 1); // Max heap
+        currently_found_nearest_neighbors.push((score, enter_point));
 
-        while let Some(candidate) = candidates.pop() {
+        while let Some(Reverse((candidate_dist, candidate))) = candidates.pop() {
+            // Early stop: if the closest remaining candidate is already farther than
+            // our current worst neighbor, no node reachable from here can improve the result.
+            if currently_found_nearest_neighbors.len() >= ef
+                && candidate_dist > currently_found_nearest_neighbors.peek().unwrap().0
+            {
+                break;
+            }
             debug!(
                 "[S1] Exploring neighbors from candidate node {} at layer 0.",
                 candidate
@@ -503,23 +515,23 @@ where
                         .calculate_distance(&self.features[neighbor_feature_index], query_feature);
 
                     
-                    let position = currently_found_nearest_neighbors.partition_point(|n| n.1 <= score);
-                    if position != ef { // Found a closer neighbor for our CFNN
-                        debug!(
-                            "     [S3] CFNN Updated! New neighbor: {:?} at pos {}. Distance is: {:?}",
-                            *neighbor, position, score
-                        );
-                        if currently_found_nearest_neighbors.len() == ef { // List is full, remove the latest one
-                            currently_found_nearest_neighbors.pop();
+                    if currently_found_nearest_neighbors.len() < ef || 
+                        score < currently_found_nearest_neighbors.peek().unwrap().0 {
+                            candidates.push(Reverse((score, *neighbor as usize)));
+                            currently_found_nearest_neighbors.push((score, *neighbor as usize));
+                            if currently_found_nearest_neighbors.len() > ef {
+                                currently_found_nearest_neighbors.pop(); // evict the farthest
+                            }
                         }
-                        currently_found_nearest_neighbors.insert(position, (*neighbor as usize, score));
-                        candidates.push(*neighbor as usize); // New CFNN candidate to explore in the next iterations...
-                    }
                 }
             }
         }
 
         currently_found_nearest_neighbors
+            .into_sorted_vec()
+            .into_iter()
+            .map(|(dist, idx)| (idx, dist))
+            .collect()
     }
 
     #[inline]
@@ -530,10 +542,21 @@ where
         ef: usize,
         visited_neighbors: &mut HashSet<usize>,
     ) -> Vec<(usize, u32)> {
-        let mut candidates: Vec<usize> = vec![enter_point];
-        let mut currently_found_nearest_neighbors: Vec<(usize, u32)> = vec![(enter_point, score)];
+        let mut candidates: BinaryHeap<Reverse<(u32, usize)>> = BinaryHeap::with_capacity(ef); // Min heap
+        candidates.push(Reverse((score, enter_point)));
+        let mut currently_found_nearest_neighbors: BinaryHeap<(u32, usize)> = 
+            BinaryHeap::with_capacity(ef + 1); // Max heap
+        currently_found_nearest_neighbors.push((score, enter_point));
 
-        while let Some(candidate) = candidates.pop() {
+        while let Some(Reverse((candidate_dist, candidate))) = candidates.pop() {
+            // Early stop: if the closest remaining candidate is already farther than
+            // our current worst neighbor, no node reachable from here can improve the result.
+            if currently_found_nearest_neighbors.len() >= ef
+                && candidate_dist > currently_found_nearest_neighbors.peek().unwrap().0
+            {
+                break;
+            }
+
             debug!(
                 "[S1] Exploring neighbors from candidate node {} at layer 0.",
                 candidate
@@ -549,22 +572,32 @@ where
                         .distance
                         .calculate_distance(&self.features[neighbor_feature_index], query_feature);
 
-                    let pos = currently_found_nearest_neighbors.partition_point(|n| n.1 <= score);
-                    if pos != ef {
+                    // Admit the neighbor if there is still space, or if it beats
+                    // the current worst keeper.
+                    if currently_found_nearest_neighbors.len() < ef
+                        || score < currently_found_nearest_neighbors.peek().unwrap().0
+                    {
                         debug!(
-                            "    [S3] CFNN Updated! New neighbor: {:?} at pos {}. Distance is: {:?}",
-                            *neighbor, pos, score
+                            "    [S3] CFNN Updated! New neighbor: {:?}. Distance is: {:?}",
+                            *neighbor, score
                         );
-                        if currently_found_nearest_neighbors.len() == ef {
-                            currently_found_nearest_neighbors.pop();
+                        candidates.push(Reverse((score, neighbor_feature_index)));
+                        currently_found_nearest_neighbors.push((score, neighbor_feature_index));
+                        if currently_found_nearest_neighbors.len() > ef {
+                            currently_found_nearest_neighbors.pop(); // evict the farthest
                         }
-                        currently_found_nearest_neighbors.insert(pos, (*neighbor as usize, score));
-                        candidates.push(*neighbor as usize);
                     }
                 }
             }
         }
+
+        // Return ascending by distance, as (node_index, distance) — the contract
+        // callers rely on (`take(k)`, and `[0]` == nearest).
         currently_found_nearest_neighbors
+            .into_sorted_vec()
+            .into_iter()
+            .map(|(dist, idx)| (idx, dist))
+            .collect()
     }
 
     fn random_level(&mut self) -> usize {
