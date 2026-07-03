@@ -109,8 +109,11 @@ where
             self.hnsw.knn_search(query, k, ef_search)
         };
 
+        let mut hnsw_results = hnsw_results;
+        hnsw_results.sort_by_key(|(d, _, _)| *d);
         hnsw_results
             .into_iter()
+            .take(k)
             .map(|(distance, index, _id)| (distance, &self.records[index]))
             .collect()
     }
