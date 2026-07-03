@@ -443,9 +443,13 @@ where
                 
                 candidates.push((node, feature, distance_to_new_node));
             }
-            // We also include the new node. 
+            // We also include the new node.
             candidates.push((new_node_index, new_node_feature_idx, new_distance));
-            candidates.sort_by_key(|&(_, _, d)| d); // claude says we need this, but i'm not 100% sure...
+            // Required: candidates come from the neighbor's existing list, in arbitrary
+            // insertion order. select_neighbors_heuristic() is a greedy diversity selection
+            // that must see candidates in ascending distance order, otherwise a farther
+            // candidate can be accepted before a closer one that should have taken its slot.
+            candidates.sort_by_key(|&(_, _, d)| d);
 
 
             // Now, evaluate each new neighbor's neighbor list VS. the new node, BUT WITH HEURISTIC!
