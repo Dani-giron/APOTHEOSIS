@@ -87,6 +87,10 @@ where
         k: usize,
         ef_search: Option<usize>,
     ) -> Vec<(u32, &R)> {
+        if self.records.is_empty() {
+            return vec![];
+        }
+
         let ef_search = ef_search.unwrap_or(24);
 
         let hnsw_results: Vec<(u32, usize, &R::MetricId)> = if let Some(key) = query.to_radix_key()
