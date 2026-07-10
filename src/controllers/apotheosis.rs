@@ -17,17 +17,24 @@ use std::path::{Path, PathBuf};
     serialize = "R: ApotheosisRecord + serde::Serialize, D: DistanceAlgorithm<R::MetricId> + serde::Serialize, R::MetricId: serde::Serialize",
     deserialize = "R: ApotheosisRecord + serde::Deserialize<'de>, D: DistanceAlgorithm<R::MetricId> + serde::Deserialize<'de>, R::MetricId: serde::Deserialize<'de>"
 ))]
-pub struct Apotheosis<R, D, const M: usize = 16, const M0: usize = 32, const EF: usize = 400, const HEURISTIC: bool = false>
-where
+pub struct Apotheosis<
+    R,
+    D,
+    const M: usize = 16,
+    const M0: usize = 32,
+    const EF: usize = 400,
+    const HEURISTIC: bool = false,
+> where
     R: ApotheosisRecord,
     D: DistanceAlgorithm<R::MetricId> + Default,
 {
-    pub hnsw: Hnsw<D, R::MetricId, M, M0, EF, HEURISTIC>,
-    pub radix: RadixNode<u8, Option<usize>>,
-    pub records: Vec<R>,
+    hnsw: Hnsw<D, R::MetricId, M, M0, EF, HEURISTIC>,
+    radix: RadixNode<u8, Option<usize>>,
+    records: Vec<R>,
 }
 
-impl<R, D, const M: usize, const M0: usize, const EF: usize, const HEURISTIC: bool> Apotheosis<R, D, M, M0, EF, HEURISTIC>
+impl<R, D, const M: usize, const M0: usize, const EF: usize, const HEURISTIC: bool>
+    Apotheosis<R, D, M, M0, EF, HEURISTIC>
 where
     R: ApotheosisRecord,
     D: DistanceAlgorithm<R::MetricId> + Default,
@@ -67,6 +74,16 @@ where
 
         self.records.push(item);
         true
+    }
+
+    /// Number of records currently indexed.
+    pub fn len(&self) -> usize {
+        self.records.len()
+    }
+
+    /// Whether the model has no records indexed yet.
+    pub fn is_empty(&self) -> bool {
+        self.records.is_empty()
     }
 
     /// Performs an approximate k-NN search. If the `MetricId` natively maps to a Radix Tree key
