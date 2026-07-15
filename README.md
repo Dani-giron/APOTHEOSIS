@@ -8,6 +8,8 @@ APOTHEOSIS (*APprOximaTe searcH systEm Of Similarity dIgeSts*) is a powerful sys
 - Construction of APOTHEOSIS model, consisting on two data structures: Radix Tree and HNSW.
 - Insertion of nodes in the system.
 - K-nearest neighbor search based on similarity.
+- Model persistence: dump a built model to disk and load it back.
+- GEXF export of the HNSW graph (one file per layer) for visualization in Gephi.
 - Logging functionality for debugging and monitoring.
 
 
@@ -57,6 +59,19 @@ fn main() {
         println!("distance={} radix_key={}", distance, record.radix_key);
     }
 }
+```
+
+### Persistence and export
+
+A built model can be saved to disk and loaded back. `load()` validates the M, M0 and EF parameters in the file header against the loading type. The HNSW graph can also be exported to GEXF files (one per layer) for visualization in Gephi.
+
+```rust
+// dump() and load() return Result.
+index.dump("model.bin")?;
+let loaded: Apotheosis<SimpleTlshRecord, TlshDistance> = Apotheosis::load("model.bin")?;
+
+// draw() writes model_layer0.gexf, model_layer1.gexf, ... next to the given base path.
+index.draw("model");
 ```
 
 
