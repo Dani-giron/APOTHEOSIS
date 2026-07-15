@@ -17,8 +17,14 @@ use std::path::{Path, PathBuf};
     serialize = "R: ApotheosisRecord + serde::Serialize, D: DistanceAlgorithm<R::MetricId> + serde::Serialize, R::MetricId: serde::Serialize",
     deserialize = "R: ApotheosisRecord + serde::Deserialize<'de>, D: DistanceAlgorithm<R::MetricId> + serde::Deserialize<'de>, R::MetricId: serde::Deserialize<'de>"
 ))]
-pub struct Apotheosis<R, D, const M: usize = 16, const M0: usize = 32, const EF: usize = 400, const HEURISTIC: bool = false>
-where
+pub struct Apotheosis<
+    R,
+    D,
+    const M: usize = 16,
+    const M0: usize = 32,
+    const EF: usize = 400,
+    const HEURISTIC: bool = false,
+> where
     R: ApotheosisRecord,
     D: DistanceAlgorithm<R::MetricId> + Default,
 {
@@ -27,7 +33,8 @@ where
     pub records: Vec<R>,
 }
 
-impl<R, D, const M: usize, const M0: usize, const EF: usize, const HEURISTIC: bool> Apotheosis<R, D, M, M0, EF, HEURISTIC>
+impl<R, D, const M: usize, const M0: usize, const EF: usize, const HEURISTIC: bool>
+    Apotheosis<R, D, M, M0, EF, HEURISTIC>
 where
     R: ApotheosisRecord,
     D: DistanceAlgorithm<R::MetricId> + Default,
@@ -129,6 +136,7 @@ where
         file.write_all(&(M as u32).to_le_bytes())?;
         file.write_all(&(M0 as u32).to_le_bytes())?;
         file.write_all(&(EF as u32).to_le_bytes())?;
+        file.write_all(&[HEURISTIC as u8])?;
 
         // Then write the model data
         bincode::serialize_into(file, self)?;
@@ -141,8 +149,8 @@ where
     {
         let mut file = File::open(path)?;
 
-        // Read and verify header (16 bytes)
-        let mut header = [0u8; 16];
+        // Read and verify header (17 bytes)
+        let mut header = [0u8; 17];
         file.read_exact(&mut header)?;
 
         if &header[0..4] != b"APOT" {
@@ -152,11 +160,12 @@ where
         let m = u32::from_le_bytes(header[4..8].try_into()?);
         let m0 = u32::from_le_bytes(header[8..12].try_into()?);
         let ef = u32::from_le_bytes(header[12..16].try_into()?);
+        let heuristic = header[16] != 0;
 
-        if m != M as u32 || m0 != M0 as u32 || ef != EF as u32 {
+        if m != M as u32 || m0 != M0 as u32 || ef != EF as u32 || heuristic != HEURISTIC {
             return Err(format!(
-                "Model parameter mismatch. File has M={}, M0={}, EF={} but code expects M={}, M0={}, EF={}",
-                m, m0, ef, M, M0, EF
+                "Model parameter mismatch. File has M={}, M0={}, EF={}, HEURISTIC={} but code expects M={}, M0={}, EF={}, HEURISTIC={}",
+                m, m0, ef, heuristic, M, M0, EF, HEURISTIC
             ).into());
         }
 
