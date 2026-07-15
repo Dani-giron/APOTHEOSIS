@@ -3,6 +3,4 @@
 // GPLv3 License
 // reverseame@unizar.es
 
-pub mod controllers;
-pub mod datalayer;
-pub mod export;
+pub mod gexf;
