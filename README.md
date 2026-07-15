@@ -9,7 +9,7 @@ APOTHEOSIS (*APprOximaTe searcH systEm Of Similarity dIgeSts*) is a powerful sys
 - Insertion of nodes in the system.
 - K-nearest neighbor search based on similarity.
 - Model persistence: dump a built model to disk and load it back.
-- GEXF export of the HNSW graph (one file per layer) for visualization in Gephi.
+- GEXF export of the HNSW graph (one file per layer).
 - Logging functionality for debugging and monitoring.
 
 
@@ -63,7 +63,7 @@ fn main() {
 
 ### Persistence and export
 
-A built model can be saved to disk and loaded back. `load()` validates the M, M0 and EF parameters in the file header against the loading type. The HNSW graph can also be exported to GEXF files (one per layer) for visualization in Gephi.
+A built model can be saved to disk and loaded back. `load()` validates the M, M0 and EF parameters in the file header against the loading type. The HNSW graph can also be exported to GEXF files (one per layer).
 
 ```rust
 // dump() and load() return Result.
