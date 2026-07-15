@@ -445,10 +445,7 @@ where
             }
             // We also include the new node.
             candidates.push((new_node_index, new_node_feature_idx, new_distance));
-            // Required: candidates come from the neighbor's existing list, in arbitrary
-            // insertion order. select_neighbors_heuristic() is a greedy diversity selection
-            // that must see candidates in ascending distance order, otherwise a farther
-            // candidate can be accepted before a closer one that should have taken its slot.
+            // Required: select_neighbors_heuristic() needs candidates in ascending distance order.
             candidates.sort_by_key(|&(_, _, d)| d);
 
 
