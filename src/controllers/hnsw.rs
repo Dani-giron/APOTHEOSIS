@@ -1,7 +1,7 @@
 use crate::datalayer::algorithms::DistanceAlgorithm;
 use crate::datalayer::nodes::HnswNode;
-use core::cmp::min;
 use core::cmp::Reverse;
+use core::cmp::min;
 use rand::rngs::StdRng;
 use rand::{RngCore, SeedableRng};
 use std::cmp;
@@ -18,8 +18,14 @@ fn default_rng() -> StdRng {
     serialize = "ID: serde::Serialize, D: DistanceAlgorithm<ID> + serde::Serialize",
     deserialize = "ID: serde::Deserialize<'de>, D: DistanceAlgorithm<ID> + serde::Deserialize<'de>"
 ))]
-pub struct Hnsw<D, ID, const M: usize, const M0: usize, const EF: usize = 400, const HEURISTIC: bool = false>
-where
+pub struct Hnsw<
+    D,
+    ID,
+    const M: usize,
+    const M0: usize,
+    const EF: usize = 400,
+    const HEURISTIC: bool = false,
+> where
     D: DistanceAlgorithm<ID> + Default,
 {
     features: Vec<ID>,
@@ -30,7 +36,8 @@ where
     distance: D,
 }
 
-impl<D, ID, const M: usize, const M0: usize, const EF: usize, const HEURISTIC: bool> Hnsw<D, ID, M, M0, EF, HEURISTIC>
+impl<D, ID, const M: usize, const M0: usize, const EF: usize, const HEURISTIC: bool>
+    Hnsw<D, ID, M, M0, EF, HEURISTIC>
 where
     D: DistanceAlgorithm<ID> + Default,
 {
@@ -253,26 +260,41 @@ where
         // Iterate each neighbor to see who's a better link. Our new node, or some of the new neighbors?
         for &(cand_node, candidate_feature_idx, candidate_distance) in candidates {
             // Greedy set cover, this is, we only check candidate against ALREADY-SELECTED (confirmed) neighbors
-            let is_new_node_best_candidate = new_confirmed_neighbors.iter().all(|&(_, selected_feature_idx, _)| { 
-                self.distance.calculate_distance(
-                    &self.features[candidate_feature_idx],
-                    &self.features[selected_feature_idx],
-                ) >= candidate_distance
-            });
+            let is_new_node_best_candidate =
+                new_confirmed_neighbors
+                    .iter()
+                    .all(|&(_, selected_feature_idx, _)| {
+                        self.distance.calculate_distance(
+                            &self.features[candidate_feature_idx],
+                            &self.features[selected_feature_idx],
+                        ) >= candidate_distance
+                    });
 
-            if is_new_node_best_candidate { // The node we are inserting is the best link
-                new_confirmed_neighbors.push((cand_node, candidate_feature_idx, candidate_distance));
+            if is_new_node_best_candidate {
+                // The node we are inserting is the best link
+                new_confirmed_neighbors.push((
+                    cand_node,
+                    candidate_feature_idx,
+                    candidate_distance,
+                ));
                 if new_confirmed_neighbors.len() == max_neighbors {
                     break;
                 }
             } // Else, some of the other neighbors is better than us (and will be linked to it later)!
         }
 
-        new_confirmed_neighbors.iter().map(|&(node, _, dist)| (node, dist)).collect()
+        new_confirmed_neighbors
+            .iter()
+            .map(|&(node, _, dist)| (node, dist))
+            .collect()
     }
 
     #[inline]
-    fn add_node_heuristic(&mut self, new_neighbors: &mut Vec<(usize, u32)>, layer_idx: Option<usize>) {
+    fn add_node_heuristic(
+        &mut self,
+        new_neighbors: &mut Vec<(usize, u32)>,
+        layer_idx: Option<usize>,
+    ) {
         let new_feature_idx = self.features.len() - 1;
 
         let new_node_index = match layer_idx {
@@ -280,7 +302,6 @@ where
             None => self.zero_layer.len() as u32,
         };
 
-        
         let candidates: Vec<(u32, usize, u32)> = new_neighbors // (neighbor_idx, feature_idx, distance)
             .iter()
             .map(|&(node, dist)| {
@@ -319,7 +340,8 @@ where
                     neighbor_count: selected.len() as u16,
                 });
 
-                let selected_as_usize: Vec<(usize, u32)> = selected.iter().map(|&(n, d)| (n as usize, d)).collect();
+                let selected_as_usize: Vec<(usize, u32)> =
+                    selected.iter().map(|&(n, d)| (n as usize, d)).collect();
                 self.connect_neighbors_heuristic(new_node_index, &selected_as_usize, Some(idx));
             }
             None => {
@@ -338,7 +360,8 @@ where
                     neighbor_count: selected.len() as u16,
                 });
 
-                let selected_as_usize: Vec<(usize, u32)> = selected.iter().map(|&(n, d)| (n as usize, d)).collect();
+                let selected_as_usize: Vec<(usize, u32)> =
+                    selected.iter().map(|&(n, d)| (n as usize, d)).collect();
                 self.connect_neighbors_heuristic(new_node_index, &selected_as_usize, None);
             }
         }
@@ -358,12 +381,14 @@ where
                 for &(neighbor_idx, new_distance) in new_neighbors {
                     let neighbor_node = &mut self.upper_layers[idx][neighbor_idx];
 
-                    if (neighbor_node.neighbor_count as usize) < M { // We have space on the neighbor's list. Just add it.
+                    if (neighbor_node.neighbor_count as usize) < M {
+                        // We have space on the neighbor's list. Just add it.
                         let slot = neighbor_node.neighbor_count as usize;
                         neighbor_node.neighbors[slot] = new_node_index;
                         neighbor_node.neighbor_distances[slot] = new_distance;
                         neighbor_node.neighbor_count += 1;
-                    } else { // Neighbor list is full, replace it with the farest one
+                    } else {
+                        // Neighbor list is full, replace it with the farest one
                         let (worst_ix, worst_distance) = neighbor_node
                             .active_distances()
                             .iter()
@@ -371,7 +396,8 @@ where
                             .max_by_key(|&(_, &distance)| distance)
                             .unwrap();
 
-                        if new_distance < *worst_distance { // Bidirecionally connect the nodes ONLY if we have space
+                        if new_distance < *worst_distance {
+                            // Bidirecionally connect the nodes ONLY if we have space
                             neighbor_node.neighbors[worst_ix] = new_node_index;
                             neighbor_node.neighbor_distances[worst_ix] = new_distance;
                         }
@@ -437,17 +463,16 @@ where
                 };
 
                 let feature: usize = match layer_idx {
-                        Some(idx) => self.upper_layers[idx][node as usize].feature_index as usize,
-                        None => self.zero_layer[node as usize].feature_index as usize,
-                    };
-                
+                    Some(idx) => self.upper_layers[idx][node as usize].feature_index as usize,
+                    None => self.zero_layer[node as usize].feature_index as usize,
+                };
+
                 candidates.push((node, feature, distance_to_new_node));
             }
             // We also include the new node.
             candidates.push((new_node_index, new_node_feature_idx, new_distance));
             // Required: select_neighbors_heuristic() needs candidates in ascending distance order.
             candidates.sort_by_key(|&(_, _, d)| d);
-
 
             // Now, evaluate each new neighbor's neighbor list VS. the new node, BUT WITH HEURISTIC!
             // Second time we call here and some ops may be redundant, could this be cached somehow or i'm just rambling?
@@ -486,7 +511,7 @@ where
     ) -> Vec<(usize, u32)> {
         let mut candidates: BinaryHeap<Reverse<(u32, usize)>> = BinaryHeap::with_capacity(ef); // Min heap
         candidates.push(Reverse((score, enter_point)));
-        let mut currently_found_nearest_neighbors: BinaryHeap<(u32, usize)> = 
+        let mut currently_found_nearest_neighbors: BinaryHeap<(u32, usize)> =
             BinaryHeap::with_capacity(ef + 1); // Max heap
         currently_found_nearest_neighbors.push((score, enter_point));
 
@@ -510,20 +535,21 @@ where
                     self.upper_layers[layer_idx - 1][*neighbor as usize].feature_index as usize;
                 debug!("    [S2] Exploring neighbor: {:?}", neighbor);
 
-                if visited_neighbors.insert(neighbor_feature_index) { // We have NOT visited the current neighbor
+                if visited_neighbors.insert(neighbor_feature_index) {
+                    // We have NOT visited the current neighbor
                     let score = self
                         .distance
                         .calculate_distance(&self.features[neighbor_feature_index], query_feature);
 
-                    
-                    if currently_found_nearest_neighbors.len() < ef || 
-                        score < currently_found_nearest_neighbors.peek().unwrap().0 {
-                            candidates.push(Reverse((score, *neighbor as usize)));
-                            currently_found_nearest_neighbors.push((score, *neighbor as usize));
-                            if currently_found_nearest_neighbors.len() > ef {
-                                currently_found_nearest_neighbors.pop(); // evict the farthest
-                            }
+                    if currently_found_nearest_neighbors.len() < ef
+                        || score < currently_found_nearest_neighbors.peek().unwrap().0
+                    {
+                        candidates.push(Reverse((score, *neighbor as usize)));
+                        currently_found_nearest_neighbors.push((score, *neighbor as usize));
+                        if currently_found_nearest_neighbors.len() > ef {
+                            currently_found_nearest_neighbors.pop(); // evict the farthest
                         }
+                    }
                 }
             }
         }
@@ -545,7 +571,7 @@ where
     ) -> Vec<(usize, u32)> {
         let mut candidates: BinaryHeap<Reverse<(u32, usize)>> = BinaryHeap::with_capacity(ef); // Min heap
         candidates.push(Reverse((score, enter_point)));
-        let mut currently_found_nearest_neighbors: BinaryHeap<(u32, usize)> = 
+        let mut currently_found_nearest_neighbors: BinaryHeap<(u32, usize)> =
             BinaryHeap::with_capacity(ef + 1); // Max heap
         currently_found_nearest_neighbors.push((score, enter_point));
 
