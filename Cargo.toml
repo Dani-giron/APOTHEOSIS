@@ -3,6 +3,7 @@ name = "apotheosis2"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.88"
+license = "GPL-3.0-only"
 
 [dependencies]
 rand_pcg = "0.3.1"
