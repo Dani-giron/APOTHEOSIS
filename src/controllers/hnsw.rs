@@ -227,7 +227,7 @@ where
                 self.connect_neighbors(new_node_index, new_neighbors, Some(idx));
             }
             None => {
-                // Zero layer insetion
+                // Zero layer insertion
                 let new_node_index = self.zero_layer.len() as u32;
                 let mut neighbors = [!0; M0];
                 let mut neighbor_distances = [!0; M0];
@@ -394,7 +394,7 @@ where
                         neighbor_node.neighbor_distances[slot] = new_distance;
                         neighbor_node.neighbor_count += 1;
                     } else {
-                        // Neighbor list is full, replace it with the farest one
+                        // Neighbor list is full, replace it with the farthest one
                         let (worst_ix, worst_distance) = neighbor_node
                             .active_distances()
                             .iter()
@@ -734,9 +734,9 @@ where
         ));
 
         let node = &self.zero_layer[index];
-        let neigbors = node.active_neighbors();
+        let neighbors = node.active_neighbors();
 
-        for neighbor_index in neigbors {
+        for neighbor_index in neighbors {
             let score = self.distance.calculate_distance(
                 &self.features[*neighbor_index as usize],
                 &self.features[node.feature_index as usize],
