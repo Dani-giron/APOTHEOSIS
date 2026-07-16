@@ -12,13 +12,13 @@ fn read_hashes_from_json<P: AsRef<std::path::Path>>(path: P) -> Vec<String> {
     let v: Value = serde_json::from_str(&data).expect("Failed to parse JSON");
     let obj = v.as_object().expect("Expected JSON object at root");
 
-    if let Some(hashes_value) = obj.get("hashes") {
-        if let Some(hashes_array) = hashes_value.as_array() {
-            return hashes_array
-                .iter()
-                .filter_map(|val| val.as_str().map(|s| s.to_string()))
-                .collect();
-        }
+    if let Some(hashes_value) = obj.get("hashes")
+        && let Some(hashes_array) = hashes_value.as_array()
+    {
+        return hashes_array
+            .iter()
+            .filter_map(|val| val.as_str().map(|s| s.to_string()))
+            .collect();
     }
 
     Vec::new()
@@ -74,7 +74,7 @@ pub fn main() {
             let diff = tlsh_query.diff(&tlsh_candidate, true) as u32;
             if diff < closest.0 {
                 closest.0 = diff;
-                closest.1 = Some(&candidate);
+                closest.1 = Some(candidate);
             }
         }
 

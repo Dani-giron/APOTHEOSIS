@@ -46,7 +46,25 @@ where
             records: vec![],
         }
     }
+}
 
+impl<R, D, const M: usize, const M0: usize, const EF: usize, const HEURISTIC: bool> Default
+    for Apotheosis<R, D, M, M0, EF, HEURISTIC>
+where
+    R: ApotheosisRecord,
+    D: DistanceAlgorithm<R::MetricId> + Default,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<R, D, const M: usize, const M0: usize, const EF: usize, const HEURISTIC: bool>
+    Apotheosis<R, D, M, M0, EF, HEURISTIC>
+where
+    R: ApotheosisRecord,
+    D: DistanceAlgorithm<R::MetricId> + Default,
+{
     /// Inserts an ApotheosisRecord into the Apotheosis Model (radix tree + HNSW + vector metadata).
     /// The record's `search_id` is stored in HNSW for similarity search, the `radix_key` is mapped
     /// to the record's index, and the record itself is stored for later retrieval.
@@ -60,11 +78,11 @@ where
     pub fn insert(&mut self, item: R) -> bool {
         let radix_key = item.search_id().to_radix_key();
 
-        if let Some(ref key) = radix_key {
-            if self.radix.find(key).is_some() {
-                println!("Key already exists in radix tree: {:?}", key);
-                return false;
-            }
+        if let Some(ref key) = radix_key
+            && self.radix.find(key).is_some()
+        {
+            println!("Key already exists in radix tree: {:?}", key);
+            return false;
         }
 
         let hnsw_node_index = self.hnsw.insert(item.search_id());
@@ -179,7 +197,6 @@ where
     ///
     /// # Parameters
     /// * `path` - Base filename for output (e.g., "model" creates "model_layer0.gexf", "model_layer1.gexf", etc.)
-
     pub fn draw<P: AsRef<Path>>(&self, path: P) {
         let base_path = path.as_ref();
 
@@ -203,7 +220,7 @@ where
                         source_id.clone(),
                         target_id.clone(),
                     )
-                    .with_weight(distance.clone()),
+                    .with_weight(*distance),
                 );
             }
 
@@ -214,26 +231,26 @@ where
     // Once draw is built, we need to add the attribute schema to the GEXF XML
     // Has to be done manually since gexf crate does not support it yet.
     fn add_attribute_schema(&self, xml: String, attributes: Vec<(String, String)>) -> String {
-        if let Some(graph_start) = xml.find("<graph") {
-            if let Some(graph_end_offset) = xml[graph_start..].find(">") {
-                let insert_pos = graph_start + graph_end_offset + 1;
+        if let Some(graph_start) = xml.find("<graph")
+            && let Some(graph_end_offset) = xml[graph_start..].find(">")
+        {
+            let insert_pos = graph_start + graph_end_offset + 1;
 
-                let mut attrs = String::from("\n    <attributes class=\"node\">\n");
-                for (attribute_key, _) in attributes {
-                    attrs.push_str(&format!(
-                        "      <attribute id=\"{}\" title=\"{}\" type=\"string\"/>\n",
-                        attribute_key, attribute_key
-                    ));
-                }
-                attrs.push_str("    </attributes>\n");
-
-                let mut result = String::new();
-                result.push_str(&xml[..insert_pos]);
-                result.push_str(&attrs);
-                result.push_str(&xml[insert_pos..]);
-
-                return result;
+            let mut attrs = String::from("\n    <attributes class=\"node\">\n");
+            for (attribute_key, _) in attributes {
+                attrs.push_str(&format!(
+                    "      <attribute id=\"{}\" title=\"{}\" type=\"string\"/>\n",
+                    attribute_key, attribute_key
+                ));
             }
+            attrs.push_str("    </attributes>\n");
+
+            let mut result = String::new();
+            result.push_str(&xml[..insert_pos]);
+            result.push_str(&attrs);
+            result.push_str(&xml[insert_pos..]);
+
+            return result;
         }
 
         xml

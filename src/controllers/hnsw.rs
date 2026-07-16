@@ -36,6 +36,16 @@ pub struct Hnsw<
     distance: D,
 }
 
+impl<D, ID, const M: usize, const M0: usize, const EF: usize, const HEURISTIC: bool> Default
+    for Hnsw<D, ID, M, M0, EF, HEURISTIC>
+where
+    D: DistanceAlgorithm<ID> + Default,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<D, ID, const M: usize, const M0: usize, const EF: usize, const HEURISTIC: bool>
     Hnsw<D, ID, M, M0, EF, HEURISTIC>
 where
@@ -107,7 +117,7 @@ where
                 knn_neighbors.len()
             );
             if HEURISTIC {
-                self.add_node_heuristic(&mut knn_neighbors, Some(layer_ix));
+                self.add_node_heuristic(&knn_neighbors, Some(layer_ix));
             } else {
                 self.add_node(&mut knn_neighbors, Some(layer_ix));
             }
@@ -127,7 +137,7 @@ where
             &mut visited_neighbors,
         );
         if HEURISTIC {
-            self.add_node_heuristic(&mut knn_neighbors, None);
+            self.add_node_heuristic(&knn_neighbors, None);
         } else {
             self.add_node(&mut knn_neighbors, None);
         }
@@ -135,7 +145,7 @@ where
         // Create new layers up to new_level
         while self.upper_layers.len() < insertion_level {
             let node = HnswNode {
-                next_node: if self.upper_layers.len() != 0 {
+                next_node: if !self.upper_layers.is_empty() {
                     self.upper_layers.last().unwrap().len() as u32 - 1
                 } else {
                     self.zero_layer.len() as u32 - 1
@@ -150,7 +160,7 @@ where
 
         //self.print_layers();
 
-        return feature_ref;
+        feature_ref
     }
 
     pub fn initialize(&mut self, insertion_level: usize) {
@@ -290,11 +300,7 @@ where
     }
 
     #[inline]
-    fn add_node_heuristic(
-        &mut self,
-        new_neighbors: &mut Vec<(usize, u32)>,
-        layer_idx: Option<usize>,
-    ) {
+    fn add_node_heuristic(&mut self, new_neighbors: &[(usize, u32)], layer_idx: Option<usize>) {
         let new_feature_idx = self.features.len() - 1;
 
         let new_node_index = match layer_idx {
@@ -628,7 +634,7 @@ where
     }
 
     fn random_level(&mut self) -> usize {
-        let uniform: f64 = self.prng.next_u64() as f64 / core::u64::MAX as f64;
+        let uniform: f64 = self.prng.next_u64() as f64 / u64::MAX as f64;
         (-libm::log(uniform) * libm::log(M as f64).recip()) as usize
     }
 
@@ -745,6 +751,7 @@ where
         results
     }
 
+    #[allow(clippy::type_complexity)]
     pub fn draw_model(&self) -> Vec<(Vec<usize>, Vec<(String, String, f32)>)> {
         let mut layer_gexfs = Vec::new();
 
