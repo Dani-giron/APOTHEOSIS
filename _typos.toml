@@ -1,0 +1,5 @@
+[default.extend-words]
+# Spanish words in README.md's Funding support section (INCIBE grant name).
+# typos uses an English dictionary and would flag these as misspellings.
+Estratégicos = "Estratégicos"
+Ciberseguridad = "Ciberseguridad"
