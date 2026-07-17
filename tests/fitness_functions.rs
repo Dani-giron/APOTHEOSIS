@@ -227,3 +227,41 @@ fn sync_invariant_holds_after_duplicate_insert() {
         "records and zero_layer diverged after duplicate"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Test 8 - sync_invariant_maps_every_key_to_its_own_record
+//
+// Invariant: the shared index actually corresponds. The length-based sync
+// tests above pass even if entries are crossed (records[3] holding the data
+// of key 7). Exact-match search for every inserted key must return the
+// record that was inserted under that key, with distance 0.
+// ---------------------------------------------------------------------------
+#[test]
+fn sync_invariant_maps_every_key_to_its_own_record() {
+    use apotheosis2::datalayer::record::ApotheosisRecord;
+
+    let mut idx = ApoNum::new();
+    let n = 100u32;
+    for i in 0..n {
+        idx.insert(SimpleNumberRecord::create(i.to_string()));
+    }
+
+    for key in 0..n {
+        let results = idx.search(&key, 1, None);
+        assert!(
+            !results.is_empty(),
+            "exact search for key {key} returned nothing"
+        );
+        let (distance, record) = &results[0];
+        assert_eq!(
+            *distance, 0,
+            "exact match for key {key} must have distance 0"
+        );
+        assert_eq!(
+            record.search_id(),
+            key,
+            "index desync: searching key {key} returned record for key {}",
+            record.search_id()
+        );
+    }
+}

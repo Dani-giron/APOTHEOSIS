@@ -23,8 +23,10 @@ type ApoNumHeuristic = Apotheosis<SimpleNumberRecord, NormalDistance, 16, 32, 40
 // (random_level() with M=16 puts ~6% of inserts above layer 0; seed is fixed
 // at 42 in default_rng(), so this is deterministic, not flaky).
 //
-// Query 301 is not in the dataset (odd, mid-range) so search() takes the ANN
-// path (knn_search), not the radix fast-path.
+// Queries are odd values (not in the even-valued dataset), so search() takes
+// the ANN path (knn_search), not the radix fast-path. Mean recall over many
+// queries with a strict threshold: a single lucky query would not catch a
+// quality regression, and on 1-D data HNSW should be near-exact.
 // ---------------------------------------------------------------------------
 #[test]
 fn ann_recall_matches_brute_force() {
@@ -36,36 +38,42 @@ fn ann_recall_matches_brute_force() {
         inserted.push(value);
     }
 
-    let query = 301u32;
     let k = 10;
+    // 40 odd queries spread across and slightly beyond the dataset range.
+    let queries: Vec<u32> = (0..40u32).map(|q| q * 15 + 1).collect();
 
-    let ann_results = idx.search(&query, k, Some(400));
-    let ann_values: HashSet<u32> = ann_results.iter().map(|(_, r)| r.search_id()).collect();
+    let mut total_recall = 0.0;
+    for query in &queries {
+        let ann_results = idx.search(query, k, Some(400));
+        let ann_values: HashSet<u32> = ann_results.iter().map(|(_, r)| r.search_id()).collect();
 
-    let mut brute: Vec<(u32, u32)> = inserted.iter().map(|&v| (v.abs_diff(query), v)).collect();
-    brute.sort_by_key(|&(d, _)| d);
-    let brute_values: HashSet<u32> = brute.iter().take(k).map(|&(_, v)| v).collect();
+        let mut brute: Vec<(u32, u32)> =
+            inserted.iter().map(|&v| (v.abs_diff(*query), v)).collect();
+        brute.sort_by_key(|&(d, _)| d);
+        let brute_values: HashSet<u32> = brute.iter().take(k).map(|&(_, v)| v).collect();
 
-    let recall = ann_values.intersection(&brute_values).count() as f64 / k as f64;
+        total_recall += ann_values.intersection(&brute_values).count() as f64 / k as f64;
+
+        // The nearest neighbor must always be exact (catches gross errors,
+        // e.g. wrong layer/index resolution returning unrelated neighbors).
+        let brute_min_distance = brute[0].0;
+        let ann_min_distance = ann_results
+            .iter()
+            .map(|(d, _)| *d)
+            .min()
+            .expect("ANN must return at least one result for a non-empty index");
+        assert_eq!(
+            ann_min_distance, brute_min_distance,
+            "ANN closest distance must match brute-force for query {query}"
+        );
+    }
+
+    let mean_recall = total_recall / queries.len() as f64;
     assert!(
-        recall >= 0.7,
-        "ANN recall too low: {:.2} (ann={:?}, brute_top10={:?})",
-        recall,
-        ann_values,
-        brute_values
-    );
-
-    // distance-0 sanity for the closest known points (catches gross errors,
-    // e.g. wrong layer/index resolution returning unrelated neighbors)
-    let brute_min_distance = brute[0].0;
-    let ann_min_distance = ann_results
-        .iter()
-        .map(|(d, _)| *d)
-        .min()
-        .expect("ANN must return at least one result for a non-empty index");
-    assert_eq!(
-        ann_min_distance, brute_min_distance,
-        "ANN closest distance must match brute-force closest distance"
+        mean_recall >= 0.9,
+        "mean ANN recall over {} queries too low: {:.3}",
+        queries.len(),
+        mean_recall
     );
 }
 

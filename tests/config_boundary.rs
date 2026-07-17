@@ -31,6 +31,10 @@ type ApoDense = Apotheosis<SimpleNumberRecord, NormalDistance, 64, 128, 1000>;
 // Default alias reused for runtime-parameter edge cases (ef_search, k).
 type ApoDefault = Apotheosis<SimpleNumberRecord, NormalDistance>;
 
+// Small neighbor lists (M=4, M0=8) for the saturation/eviction test: with a
+// dataset far larger than M0, every list fills and the eviction branch runs.
+type ApoNumSmallSat = Apotheosis<SimpleNumberRecord, NormalDistance, 4, 8, 100>;
+
 // ---------------------------------------------------------------------------
 // Sync invariant × 4 boundary configs
 //
@@ -218,4 +222,46 @@ fn search_k_greater_than_ef_search() {
     for w in distances.windows(2) {
         assert!(w[0] <= w[1], "results not sorted: {} > {}", w[0], w[1]);
     }
+}
+
+// ---------------------------------------------------------------------------
+// Neighbor-list saturation: dataset much larger than M0
+//
+// With 10-record datasets and M0=32 the neighbor lists never fill up, so the
+// replacement branch in connect_neighbors (list full: evict the farthest
+// neighbor) never runs. 300 records with M0=8 saturate every list many times
+// over, exercising eviction continuously. The graph must stay consistent:
+// exact-match works for every key and ANN search still finds true nearest.
+// ---------------------------------------------------------------------------
+#[test]
+fn eviction_under_saturation_keeps_graph_consistent() {
+    use apotheosis2::datalayer::record::ApotheosisRecord;
+
+    // M=4, M0=8: every node's list overflows repeatedly with 300 inserts.
+    let mut idx = ApoNumSmallSat::new();
+    let n = 300u32;
+    for i in 0..n {
+        idx.insert(SimpleNumberRecord::create(i.to_string()));
+    }
+
+    // Every key must still resolve exactly through the radix fast-path.
+    for key in (0..n).step_by(7) {
+        let results = idx.search(&key, 1, None);
+        assert!(
+            !results.is_empty(),
+            "exact search for key {key} returned nothing"
+        );
+        assert_eq!(
+            results[0].0, 0,
+            "exact match for key {key} must have distance 0"
+        );
+        assert_eq!(results[0].1.search_id(), key, "wrong record for key {key}");
+    }
+
+    // ANN path (query not in dataset) must still find the true nearest.
+    let results = idx.search(&1000u32, 5, Some(100));
+    assert!(!results.is_empty(), "ANN search returned nothing");
+    let min = results.iter().map(|(d, _)| *d).min().unwrap();
+    // True nearest to 1000 is 299, distance 701.
+    assert_eq!(min, 701, "ANN nearest after heavy eviction must be exact");
 }
