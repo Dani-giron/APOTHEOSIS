@@ -12,6 +12,21 @@ use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
+/// FNV-1a hash of a string, used to encode the distance type identity in the
+/// model header. Chosen over `std` hashers because it is fully specified and
+/// stable across Rust versions, which a persistence format requires.
+const fn fnv1a(s: &str) -> u32 {
+    let bytes = s.as_bytes();
+    let mut hash: u32 = 0x811c_9dc5;
+    let mut i = 0;
+    while i < bytes.len() {
+        hash ^= bytes[i] as u32;
+        hash = hash.wrapping_mul(0x0100_0193);
+        i += 1;
+    }
+    hash
+}
+
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(bound(
     serialize = "R: ApotheosisRecord + serde::Serialize, D: DistanceAlgorithm<R::MetricId> + serde::Serialize, R::MetricId: serde::Serialize",
@@ -137,6 +152,9 @@ where
         file.write_all(&(M0 as u32).to_le_bytes())?;
         file.write_all(&(EF as u32).to_le_bytes())?;
         file.write_all(&[HEURISTIC as u8])?;
+        // Write the distance type identity as an FNV-1a hash (4 bytes)
+        let distance_id = fnv1a(<D as DistanceAlgorithm<R::MetricId>>::TYPE_NAME);
+        file.write_all(&distance_id.to_le_bytes())?;
 
         // Then write the model data
         bincode::serialize_into(file, self)?;
@@ -149,8 +167,8 @@ where
     {
         let mut file = File::open(path)?;
 
-        // Read and verify header (17 bytes)
-        let mut header = [0u8; 17];
+        // Read and verify header (21 bytes)
+        let mut header = [0u8; 21];
         file.read_exact(&mut header)?;
 
         if &header[0..4] != b"APOT" {
@@ -167,6 +185,20 @@ where
                 "Model parameter mismatch. File has M={}, M0={}, EF={}, HEURISTIC={} but code expects M={}, M0={}, EF={}, HEURISTIC={}",
                 m, m0, ef, heuristic, M, M0, EF, HEURISTIC
             ).into());
+        }
+
+        // The distance type is not part of the serialized body (bincode does
+        // not depend on D), so it must be checked explicitly: loading a model
+        // built with one distance into a type using another returns wrong
+        // results with no error otherwise.
+        let file_distance_id = u32::from_le_bytes(header[17..21].try_into()?);
+        let expected_distance_id = fnv1a(<D as DistanceAlgorithm<R::MetricId>>::TYPE_NAME);
+        if file_distance_id != expected_distance_id {
+            return Err(format!(
+                "Distance type mismatch. File was built with a different distance than the loading type (expected {}). Load the model with the distance it was created with",
+                <D as DistanceAlgorithm<R::MetricId>>::TYPE_NAME
+            )
+            .into());
         }
 
         let decoded = bincode::deserialize_from(file)?;
