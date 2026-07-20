@@ -8,6 +8,8 @@ APOTHEOSIS (*APprOximaTe searcH systEm Of Similarity dIgeSts*) is a powerful sys
 - Construction of APOTHEOSIS model, consisting on two data structures: Radix Tree and HNSW.
 - Insertion of nodes in the system.
 - K-nearest neighbor search based on similarity.
+- Model persistence: dump a built model to disk and load it back.
+- GEXF export of the HNSW graph (one file per layer).
 - Logging functionality for debugging and monitoring.
 
 
@@ -19,53 +21,57 @@ In order to reach the proper balance between precission and speed, some configur
 - *EF*: controls the number of neighbors to explore during the construction and search phase of the HNSW graph.
 
 
+## Installation
+Add `apotheosis2` and its direct dependencies to `Cargo.toml`. The crate is not published on crates.io yet, so it must be declared via git or a local path:
+
+```toml
+[dependencies]
+apotheosis2 = { git = "https://github.com/reverseame/APOTHEOSIS", branch = "apotheosis2" }
+tlsh2 = { git = "https://github.com/danielhuici/tlsh", features = ["diff", "serde"] }
+```
+
+`tlsh2` is required directly whenever TLSH types (such as `TlshDefault`) appear in your code, for example to build a query hash.
+
 ## Usage
+Implement `ApotheosisRecord` on your domain type, or use one of the ready-made types such as `SimpleTlshRecord`:
+
 ```rust
 use apotheosis2::controllers::apotheosis::Apotheosis;
 use apotheosis2::datalayer::algorithms::TlshDistance;
-use apotheosis2::datalayer::features::{FeatureType, TlshHashFeature};
-use apotheosis2::datalayer::metadata::{ApotheosisMetadata};
-
-// 1. Define your custom metadata structure
-#[derive(Debug, Clone)]
-pub struct BasicMetadata {
-    pub description: String,
-    pub timestamp: u64,
-}
-impl ApotheosisMetadata for BasicMetadata {
-    fn get_attributes(&self) -> Vec<(String, String)> {
-        vec![
-            ("description".to_string(), self.description.clone()),
-            ("timestamp".to_string(), self.timestamp.to_string()),
-        ]
-    }
-}
+use apotheosis2::datalayer::record::SimpleTlshRecord;
+use std::str::FromStr;
+use tlsh2::TlshDefault;
 
 fn main() {
-    // 3. Initialize Apotheosis with desired generic parameters:
-    //    <FeatureType, DistanceAlgorithm, Metadata, M, M0, EF>
-    let mut apotheosis = Apotheosis::<TlshHashFeature, TlshDistance, BasicMetadata, 16, 32, 400>::new();
+    let mut index: Apotheosis<SimpleTlshRecord, TlshDistance> = Apotheosis::new();
 
-    let hash_string = "T1HASH...".to_string(); // Replace with real hash
+    // SimpleTlshRecord::create panics on invalid TLSH strings.
+    // Replace with real TLSH hash strings produced by your data pipeline.
+    index.insert(SimpleTlshRecord::create("<tlsh_hash_a>".to_string()));
+    index.insert(SimpleTlshRecord::create("<tlsh_hash_b>".to_string()));
 
-    // 4. Insert items (Feature + Metadata)
-    let feature = TlshHashFeature::create(hash_string);
-    let metadata = BasicMetadata { 
-        description: "Example item".to_string(),
-        timestamp: 1234567890 
-    }; 
-    apotheosis.insert(feature, metadata);
+    let query = TlshDefault::from_str("<tlsh_hash_a>").expect("invalid TLSH hash");
 
-    // 5. Search for nearest neighbors
-    //    Arguments: (Query Hash, K neighbors, Optional EF search)
-    let query_hash = "T1HASH...".to_string(); // Replace with real query hash
-    let results = apotheosis.search(query_hash, 5, None);
+    // Pass None for ef_search; the effective value is 24.
+    let results: Vec<(u32, &SimpleTlshRecord)> = index.search(&query, 5, None);
 
-    for (distance, id, metadata) in results {
-        println!("Found neighbor {:?} with distance {}", id, distance);
-        println!("Metadata associated: {:?}", metadata);
+    for (distance, record) in &results {
+        println!("distance={} radix_key={}", distance, record.radix_key);
     }
 }
+```
+
+### Persistence and export
+
+A built model can be saved to disk and loaded back. `load()` validates the M, M0 and EF parameters in the file header against the loading type. The HNSW graph can also be exported to GEXF files (one per layer).
+
+```rust
+// dump() and load() return Result.
+index.dump("model.bin")?;
+let loaded: Apotheosis<SimpleTlshRecord, TlshDistance> = Apotheosis::load("model.bin")?;
+
+// draw() writes model_layer0.gexf, model_layer1.gexf, ... next to the given base path.
+index.draw("model");
 ```
 
 
