@@ -28,9 +28,9 @@ pub struct Apotheosis<
     R: ApotheosisRecord,
     D: DistanceAlgorithm<R::MetricId> + Default,
 {
-    pub hnsw: Hnsw<D, R::MetricId, M, M0, EF, HEURISTIC>,
-    pub radix: RadixNode<u8, Option<usize>>,
-    pub records: Vec<R>,
+    hnsw: Hnsw<D, R::MetricId, M, M0, EF, HEURISTIC>,
+    radix: RadixNode<u8, Option<usize>>,
+    records: Vec<R>,
 }
 
 impl<R, D, const M: usize, const M0: usize, const EF: usize, const HEURISTIC: bool>
@@ -74,6 +74,16 @@ where
 
         self.records.push(item);
         true
+    }
+
+    /// Number of records currently indexed.
+    pub fn len(&self) -> usize {
+        self.records.len()
+    }
+
+    /// Whether the model has no records indexed yet.
+    pub fn is_empty(&self) -> bool {
+        self.records.is_empty()
     }
 
     /// Performs an approximate k-NN search. If the `MetricId` natively maps to a Radix Tree key
