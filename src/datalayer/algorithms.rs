@@ -16,7 +16,7 @@ impl DistanceAlgorithm<u32> for NormalDistance {
 pub struct TlshDistance;
 impl DistanceAlgorithm<TlshDefault> for TlshDistance {
     fn calculate_distance(&self, a: &TlshDefault, b: &TlshDefault) -> u32 {
-        let diff = a.diff(&b, true);
+        let diff = a.diff(b, true);
         diff as u32
     }
 }

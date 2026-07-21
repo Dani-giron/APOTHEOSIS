@@ -1,0 +1,42 @@
+[advisories]
+# Deny crates with known security vulnerabilities (CVEs).
+version = 2
+db-path = "~/.cargo/advisory-db"
+db-urls = ["https://github.com/rustsec/advisory-db"]
+ignore = [
+    # bincode 1.3.3 is unmaintained (RUSTSEC-2025-0141) but has no safe upgrade.
+    # Upstream uses it for serialization; migration is tracked as a known issue.
+    "RUSTSEC-2025-0141",
+    # quick-xml 0.36.2 via gexf 0.1.1 (no newer gexf release available).
+    # These vulnerabilities affect untrusted XML parsing; gexf is used only
+    # for visualization output of internal graph data, not for parsing untrusted input.
+    "RUSTSEC-2026-0194",
+    "RUSTSEC-2026-0195",
+]
+
+[licenses]
+version = 2
+# Licenses compatible with GPL-3.0 (permissive licenses can be used in GPL projects).
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "Unicode-3.0",
+    "GPL-3.0-only",
+]
+
+[bans]
+# Warn on duplicate versions of the same crate (can indicate dependency bloat).
+multiple-versions = "warn"
+# tlsh2 is a git dependency with no semver version - wildcard is intentional.
+wildcards = "warn"
+deny = []
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+# tlsh2 is fetched directly from GitHub - this is intentional.
+allow-git = ["https://github.com/danielhuici/tlsh"]

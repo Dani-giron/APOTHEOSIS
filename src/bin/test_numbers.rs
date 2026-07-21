@@ -4,7 +4,6 @@ use apotheosis2::datalayer::record::{ApotheosisRecord, SimpleNumberRecord};
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use std::time::Instant;
-use std::u32::MAX;
 
 // cargo run --bin test_numbers
 pub fn main() {
@@ -42,18 +41,18 @@ pub fn main() {
     let mut all_results = Vec::new();
 
     // Brute force search for neighbors
-    let mut closest = (MAX, MAX);
+    let mut closest = (u32::MAX, u32::MAX);
     let mut brute_results: Vec<(u32, u32)> = vec![];
     for n in random_queries.iter() {
         for n2 in &random_numbers {
-            let dist = if n2 > n { n2 - n } else { n - n2 };
+            let dist = n2.abs_diff(*n);
             if dist < closest.0 {
                 closest.0 = dist;
                 closest.1 = *n2;
             }
         }
         brute_results.push(closest);
-        closest = (MAX, MAX);
+        closest = (u32::MAX, u32::MAX);
     }
 
     //println!("{:?}", brute_results);

@@ -1,5 +1,5 @@
 use std::str::FromStr;
-use tlsh2::{TlshDefault};
+use tlsh2::TlshDefault;
 
 /// Trait for Metric types (like TLSH or numerical IDs) to specify if they natively map to a Radix Tree exact-match key.
 pub trait RadixKeyMapping {

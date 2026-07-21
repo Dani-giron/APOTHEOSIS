@@ -14,7 +14,7 @@ APOTHEOSIS (*APprOximaTe searcH systEm Of Similarity dIgeSts*) is a powerful sys
 
 
 # System configuration parameters
-In order to reach the proper balance between precission and speed, some configuration values can be modified in order to tune the performance. This configuration values have impact on HNSW data structure mainly. Values may be adjusted depending on your use case.
+In order to reach the proper balance between precision and speed, some configuration values can be modified in order to tune the performance. This configuration values have impact on HNSW data structure mainly. Values may be adjusted depending on your use case.
 
 - *M*: specifies the maximum number of neighbors (connections) a node can have at each layer of the hierarchy higher than zero.
 - *M0*: specifies the maximum number of neighbors (connections) a node can have at each layer of the hierarchy at layer zero.
