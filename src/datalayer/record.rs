@@ -1,3 +1,4 @@
+use crate::datalayer::error::RecordError;
 use std::str::FromStr;
 use tlsh2::TlshDefault;
 
@@ -53,16 +54,28 @@ pub type SimpleNumberRecord = SimpleRecord<u32>;
 pub type SimpleTlshRecord = SimpleRecord<TlshDefault>;
 
 impl SimpleNumberRecord {
-    pub fn create(s: String) -> Self {
-        let id = s.parse::<u32>().unwrap();
-        Self { id, radix_key: s }
+    /// Builds a record from an untrusted string (e.g. a line read from a
+    /// dataset file). Returns `Err` instead of panicking so a malformed entry
+    /// can be skipped without aborting the whole ingestion.
+    pub fn create(s: String) -> Result<Self, RecordError> {
+        let id = s
+            .parse::<u32>()
+            .map_err(|source| RecordError::InvalidNumber {
+                input: s.clone(),
+                source,
+            })?;
+        Ok(Self { id, radix_key: s })
     }
 }
 
 impl SimpleTlshRecord {
-    pub fn create(s: String) -> Self {
-        let id = TlshDefault::from_str(&s).unwrap();
-        Self { id, radix_key: s }
+    /// Builds a record from an untrusted TLSH hash string. Returns `Err`
+    /// instead of panicking so a malformed entry can be skipped without
+    /// aborting the whole ingestion.
+    pub fn create(s: String) -> Result<Self, RecordError> {
+        let id = TlshDefault::from_str(&s)
+            .map_err(|_| RecordError::InvalidTlshHash { input: s.clone() })?;
+        Ok(Self { id, radix_key: s })
     }
 }
 
@@ -99,13 +112,17 @@ impl ApotheosisRecord for GenericJsonRecord {
 }
 
 impl GenericJsonRecord {
-    pub fn create(s: String, metadata: serde_json::Value) -> Self {
-        let id = TlshDefault::from_str(&s).unwrap();
-        Self {
+    /// Builds a record from an untrusted TLSH hash string. Returns `Err`
+    /// instead of panicking so a malformed entry can be skipped without
+    /// aborting the whole ingestion.
+    pub fn create(s: String, metadata: serde_json::Value) -> Result<Self, RecordError> {
+        let id = TlshDefault::from_str(&s)
+            .map_err(|_| RecordError::InvalidTlshHash { input: s.clone() })?;
+        Ok(Self {
             id,
             radix_key: s,
             metadata,
-        }
+        })
     }
 }
 

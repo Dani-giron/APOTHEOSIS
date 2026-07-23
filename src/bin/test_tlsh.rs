@@ -47,7 +47,9 @@ pub fn main() {
     );
     println!("Starting insertion into HNSW model...");
     for f in dataset_copy {
-        apotheosis.insert(SimpleTlshRecord::create(f));
+        apotheosis.insert(
+            SimpleTlshRecord::create(f).expect("hash from output_hashes.json, always valid"),
+        );
     }
 
     let query_hash = TlshDefault::from_str(
