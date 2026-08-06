@@ -22,7 +22,9 @@ The solution combines an HNSW graph (*Hierarchical Navigable Small World*) for a
 
 | Document | File | Purpose |
 |----------|------|---------|
+| Interface Documentation | [interfaz-apotheosis.md](interfaz-apotheosis.md) | Documents the usage boundary of the crate: the `Apotheosis` facade and its operations, the contract traits a client implements, the ready-to-use record and distance types, error handling, the variation points, and worked usage examples. Read this document to use the library rather than to modify it. |
 | Quality Attributes | [quality-attributes.md](quality-attributes.md) | Documents the five quality attributes that drove design (performance, persistence integrity, reproducibility, maintainability, localized variability of the metric space), the three attributes explicitly out of scope (security, availability, horizontal scalability), and a cross-view mapping table locating each attribute in the three documented views. Read this document to understand why the architecture looks the way it does. |
+| Directory and Data Dictionary | [directory.md](directory.md) | Glossary of domain and framework terms, acronym list, catalog of the central types, and bibliographic references. |
 
 ---
 
@@ -52,6 +54,7 @@ The views describe the same system from different angles. Key correspondences:
 | Document | Status |
 |-----------|--------|
 | roadmap.md (this file) | Complete |
+| interfaz-apotheosis.md | Complete |
 | vista-modulos.md | Complete |
 | vista-cc.md | Complete |
 | vista-distribucion.md | Complete |

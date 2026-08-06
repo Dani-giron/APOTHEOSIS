@@ -15,6 +15,7 @@ Framework: **Views & Beyond** (Clements et al.)
 ## Cross-cutting Documents
 
 - [Roadmap](roadmap.md)
+- [Interface Documentation](interfaz-apotheosis.md): the public API boundary of the crate, its provided resources, error handling, variability, and usage examples
 - [Quality Attributes](quality-attributes.md): design drivers, out-of-scope attributes, and mapping to the three views
 - [Directory and Data Dictionary](directory.md): glossary, acronyms, central type catalog, and bibliographic references
 
@@ -23,8 +24,10 @@ Framework: **Views & Beyond** (Clements et al.)
 ```
 docs/architecture/
 ├── README.md                        ← this file
+├── SUMMARY.md                       ← table of contents used to build the site
 ├── roadmap.md
-├── quality-attributes.md             ← quality attributes: drivers, trade-offs, and cross-view mapping
+├── interfaz-apotheosis.md           ← public API boundary: resources, errors, variability, examples
+├── quality-attributes.md            ← quality attributes: drivers, trade-offs, and cross-view mapping
 ├── directory.md                     ← glossary, acronyms, data dictionary, and references
 └── views/
     ├── module/
