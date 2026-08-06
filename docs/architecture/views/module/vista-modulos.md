@@ -66,7 +66,7 @@ Approximate nearest-neighbor search system by similarity (primarily TLSH). The s
 |---|---|
 | Responsibility | Represent an HNSW graph node: its neighbors, distances, and layer pointers. No algorithms. |
 | Public structs | `HnswNode<const N: usize>` generic over maximum neighbor count (`N = M` in upper layers, `N = M0` in layer 0) |
-| `HnswNode` fields | `feature_index: u32`, `next_node: u32`, `neighbors: [u32; N]`, `neighbor_distances: [u32; N]`, `neighbour_count: u16` |
+| `HnswNode` fields | `next_node: u32`, `feature_index: u32`, `neighbors: [u32; N]`, `neighbor_distances: [u32; N]`, `neighbor_count: u16` |
 | Public methods | `new_empty(feature_index, next_node)`, `active_neighbors() -> &[u32]`, `active_distances() -> &[u32]` |
 | External dependencies | `serde` (const-generic array serialization via internal helper module) |
 | Configuration parameters | `N` generic constant; in practice either `M` or `M0` depending on the layer |
@@ -103,17 +103,19 @@ Approximate nearest-neighbor search system by similarity (primarily TLSH). The s
 | Field | Content |
 |---|---|
 | Responsibility | Implement the multilayer ANN index: feature insertion, approximate kNN search, and direct neighbor retrieval by index (fast-path). |
-| Public structs | `Hnsw<D, ID, const M, const M0, const EF>` |
-| Public methods | `new()`, `insert(feature: ID) -> usize`, `knn_search(query, k, ef) -> Vec<(u32, usize, &ID)>`, `get_neighbors_node(index) -> Vec<(u32, usize, &ID)>`, `print_layers()`, `draw_model()` |
+| Public structs | `Hnsw<D, ID, const M, const M0, const EF, const HEURISTIC>` |
+| Public methods | `new()`, `insert(feature: ID) -> usize`, `initialize(insertion_level)` †, `knn_search(query, k, ef) -> Vec<(u32, usize, &ID)>`, `get_neighbors_node(index) -> Vec<(u32, usize, &ID)>`, `print_layers()`, `draw_model()` |
 | External dependencies | `rand`, `libm`, `tracing` |
-| Configuration parameters | `M`: max neighbors in upper layers; `M0`: max neighbors in layer 0; `EF`: exploration factor during construction and search. All three are const-generics resolved at compile time. |
+| Configuration parameters | `M`: max neighbors in upper layers; `M0`: max neighbors in layer 0; `EF`: exploration factor during construction and search; `HEURISTIC`: selects the neighbor-selection algorithm (`false` = greedy, `true` = heuristic). All four are const-generics resolved at compile time. |
+
+> **† `initialize()` is public but is an internal initialization step.** It is called by `insert` only when the graph is still empty. Calling it on a populated graph appends a spurious node and leaves the structure inconsistent; it should not be part of the public surface.
 
 #### `controllers/apotheosis.rs`
 
 | Field | Content |
 |---|---|
 | Responsibility | Public system facade. Coordinates the two indices and the record store, guarantees the synchrony invariant, and exposes persistence and export. |
-| Public structs | `Apotheosis<R, D, const M, const M0, const EF>` |
+| Public structs | `Apotheosis<R, D, const M, const M0, const EF, const HEURISTIC>` |
 | Public methods | `new()`, `insert(item: R) -> bool` (false if duplicate), `search(query, k, ef_search) -> Vec<(u32, &R)>`, `dump(path)`, `load(path)`, `draw(path)` |
 | External dependencies | `bincode`, `gexf`, `serde` |
 | Configuration parameters | Inherits `M`, `M0`, `EF` from `Hnsw`; `ef_search` in `search()` is optional at runtime. |
@@ -267,7 +269,7 @@ Traces of `search` and `insert` extracted from `controllers/apotheosis.rs`.
 ef_search ← ef_search.unwrap_or(24)
 ```
 
-If the caller does not provide `ef_search`, the default value `24` is used. This controls search exhaustiveness in the HNSW graph: higher values increase precision at the cost of more search time.
+If the caller does not provide `ef_search`, a fixed library default is used (see the interface document). This controls search exhaustiveness in the HNSW graph: higher values increase precision at the cost of more search time.
 
 #### Step 2: Path decision (fast-path vs. ANN path)
 
