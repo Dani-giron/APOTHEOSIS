@@ -166,7 +166,7 @@ Each row below is a place in the architecture where a quality attribute actually
 |---|---|---|---|
 | Performance | module | Multilayer HNSW graph (insertion and search) | `controllers/hnsw.rs`: `knn_search`, `search_upper_layers`, `search_layer_zero` |
 | Performance | module | RadixTree fast-path | `controllers/apotheosis.rs`: `Apotheosis::search` |
-| Performance | module | Compile-time graph parameters, fixed-size node arrays | `Hnsw<D, ID, M, M0, EF>` in `hnsw.rs`; `HnswNode<N>` in `datalayer/nodes.rs` |
+| Performance | module | Compile-time graph parameters, fixed-size node arrays | `Hnsw` in `controllers/hnsw.rs`; `HnswNode<N>` in `datalayer/nodes.rs` |
 | Performance | C&C | Search request flow, fast-path vs ANN-path branches | `vista-cc.md` Scenarios 2 and 3 |
 | Performance | deployment | Cargo compilation profiles | `Cargo.toml`, `[profile.dev]` and `[profile.release]` |
 | Persistence integrity | module | Header verification in dump/load | `Apotheosis::dump`, `Apotheosis::load` |
