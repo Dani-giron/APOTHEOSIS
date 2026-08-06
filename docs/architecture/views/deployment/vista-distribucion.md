@@ -48,35 +48,39 @@ src/
 │   └── record.rs             ← ApotheosisRecord and RadixKeyMapping traits; concrete types
 │
 └── bin/
-    ├── test_numbers.rs       ← benchmark: 50,000 u32 numbers; compares HNSW vs. brute force
-    └── test_tlsh.rs          ← benchmark: 60,000 TLSH hashes; reads external output_hashes.json
+    ├── test_numbers.rs       ← benchmark over synthetic u32 values; compares HNSW vs. brute force
+    └── test_tlsh.rs          ← benchmark over TLSH hashes read from an external data file
 ```
+
+Both binaries hardcode their dataset sizes and query counts; see the sources for the current values.
 
 ### 2.2 External Dependencies
 
+Version requirements live in `Cargo.toml` and are not repeated here; this section documents what each dependency is for.
+
 #### Active dependencies (used in the code)
 
-| Dependency | Version | Actual use |
-|---|---|---|
-| `tlsh2` | own git fork (`diff`, `serde`) | `TlshDefault` type; TLSH distance computation via `diff()` in `algorithms.rs`; hash serialization. Fork at `github.com/danielhuici/tlsh` with `diff` and `serde` features not available in the crates.io release |
-| `serde` | 1.0.228 (`derive`) | Serialization and deserialization of all model structs for `dump`/`load` |
-| `bincode` | 1.3.3 | Compact binary encoding of the serialized model in `dump`/`load` |
-| `serde_json` | 1.0.145 | JSON deserialization in `GenericJsonRecord`; reading `output_hashes.json` in `test_tlsh` |
-| `gexf` | 0.1.1 | GEXF file generation for Gephi visualization from `draw()` |
-| `rand` | 0.8 (`std_rng`) | `StdRng` in `hnsw.rs` to compute the random insertion level in the graph |
-| `rand_core` | 0.6.3 | Core traits required by `rand` |
-| `libm` | 0.2.1 | `libm::log()` in `hnsw.rs::random_level()` for insertion level computation |
-| `tracing` | 0.1 | `debug!` macros in `hnsw.rs` for insertion and search tracing |
+| Dependency | Actual use |
+|---|---|
+| `tlsh2` | `TlshDefault` type; TLSH distance computation via `diff()` in `algorithms.rs`; hash serialization. Consumed from a git fork at `github.com/danielhuici/tlsh`, which enables the `diff` and `serde` features not available in the crates.io release |
+| `serde` | Serialization and deserialization of all model structs for `dump`/`load` |
+| `bincode` | Compact binary encoding of the serialized model body in `dump`/`load` |
+| `serde_json` | JSON deserialization in `GenericJsonRecord`, and reading the benchmark data file in `test_tlsh` |
+| `gexf` | GEXF file generation for Gephi visualization from `draw()` |
+| `rand` | `StdRng` in `hnsw.rs`, used to draw the random insertion level of each new element |
+| `rand_core` | Core traits required by `rand` |
+| `libm` | `libm::log()` in `Hnsw::random_level()` for the insertion level computation |
+| `tracing` | `debug!` macros in `hnsw.rs` tracing insertion and search |
 
 #### Declared but unused dependencies
 
-| Dependency | Version | Status |
-|---|---|---|
-| `axum` | 0.8.8 | Declared; does not appear in any source file. Infrastructure for an unimplemented REST API |
-| `rand_pcg` | 0.3.1 | Declared; does not appear in any source file |
-| `tracing-subscriber` | 0.3 (`env-filter`) | Declared; does not appear in library code. Likely intended to configure tracing in the bins |
+| Dependency | Status |
+|---|---|
+| `axum` | Declared, but does not appear in any source file. Infrastructure for a REST API that does not exist yet |
+| `rand_pcg` | Declared, but does not appear in any source file. The graph uses `rand`'s `StdRng`, not the PCG generator |
+| `tracing-subscriber` | Declared, but not used in library code. A library normally depends on the `tracing` facade only and leaves the subscriber to whoever embeds it |
 
-> **Known technical debt:** `axum` (async HTTP framework) adds transitive dependency weight for infrastructure that does not exist in the current code. `tokio` and `clap`, previously declared unnecessarily, were removed in upstream commit `c1f7ef6`. Until the REST API is implemented, `axum` should also be removed to keep build times and security audit scope minimal.
+> **Known technical debt:** these three dependencies add transitive weight and audit surface for functionality the crate does not have. `axum` in particular pulls in an async HTTP stack. They should be removed, or moved to the binaries that actually need them, until the corresponding functionality exists.
 
 ### 2.3 Disk Artifacts
 
@@ -87,14 +91,17 @@ src/
 ```
 Offset  Size    Content
 ------  ------  ---------
-0       4 B     Magic bytes: "APOT" (0x41 0x50 0x4F 0x54)
+0       4 B     Magic bytes: "APOT"
 4       4 B     M  as u32 little-endian  (max neighbors, upper layers)
 8       4 B     M0 as u32 little-endian  (max neighbors, layer 0)
 12      4 B     EF as u32 little-endian  (exploration factor)
-16      var.    Apotheosis<R,D,M,M0,EF> struct encoded with bincode
+16      1 B     HEURISTIC as a single byte (0 or 1)
+17      var.    Apotheosis struct encoded with bincode
 ```
 
-The 16-byte header makes the format (self-describing with respect to const-generics): `load` reads the `M`, `M0`, and `EF` values from the file and compares them at runtime against the const-generics the `Apotheosis<R,D,M,M0,EF>` type was compiled with. If they do not match, it returns an error with the exact mismatch message (e.g. `"Model parameter mismatch. File has M=16, M0=32, EF=400 but code expects M=32, M0=64, EF=64"`). If they match, deserialization with bincode proceeds. The file name is free; the library imposes no convention.
+The header makes the format self-describing with respect to the compile-time graph parameters: `load` reads `M`, `M0`, `EF`, and `HEURISTIC` from the file and compares them against the const-generics the loading type was compiled with. Any mismatch returns an error naming both the stored and the expected values, so the caller can identify the problem without inspecting the binary. Only if all four match does bincode deserialization proceed. The file name is free; the library imposes no convention.
+
+The header does not cover the record type `R` or the distance type `D`, so a file written with one distance function can be handed to a type expecting another without the header objecting.
 
 #### Visualization files: `draw` operation
 
@@ -118,7 +125,9 @@ The content is GEXF XML with a node attribute schema added manually as a workaro
 { "hashes": ["T1...", "T1...", ...] }
 ```
 
-This file is not part of the library; it is an external data artifact needed only to run the TLSH benchmark binary with real hashes.
+The binary slices this array by hardcoded index ranges to build its dataset and its query set, and the query range starts well beyond the dataset range. A file that merely holds enough hashes for the dataset will therefore panic on the query slice. Check the index ranges in `src/bin/test_tlsh.rs` before preparing the file.
+
+This file is not part of the library; it is an external data artifact needed only to run the TLSH benchmark with real hashes.
 
 ### 2.4 Integration and Distribution
 
@@ -132,13 +141,13 @@ APOTHEOSIS 2 produces two artifact types when compiled:
 **Integration in client projects:**
 
 ```toml
-# Local dependency (development)
-[dependencies]
-apotheosis2 = { path = "../APOTHEOSIS-apotheosis2" }
-
 # Git dependency (distribution)
 [dependencies]
-apotheosis2 = { git = "https://github.com/<org>/APOTHEOSIS-apotheosis2" }
+apotheosis2 = { git = "https://github.com/reverseame/APOTHEOSIS", branch = "apotheosis2" }
+
+# Local dependency (development against a working copy)
+[dependencies]
+apotheosis2 = { path = "../APOTHEOSIS" }
 ```
 
 ---
