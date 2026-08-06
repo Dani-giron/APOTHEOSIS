@@ -33,7 +33,7 @@ This document is the Directory section of the APOTHEOSIS 2 documentation package
 
 **Fuzzy hash.** A hash function whose output preserves locality: small changes in the input produce small changes in the output. This property enables similarity comparison between inputs without exact matching, which is not possible with cryptographic hashes. TLSH is the fuzzy hash used as the primary metric in APOTHEOSIS 2.
 
-**GEXF (Graph Exchange XML Format).** An XML-based file format for representing graph structures, consumed by visualization tools such as Gephi. The `Apotheosis::draw()` method (`src/controllers/apotheosis.rs`) produces one GEXF file per HNSW layer with the naming pattern `<stem>_layer<N>.gexf`. The `gexf` crate (version 0.1.1, `Cargo.toml`) is used to generate these files.
+**GEXF (Graph Exchange XML Format).** An XML-based file format for representing graph structures, consumed by visualization tools such as Gephi. The `Apotheosis::draw()` method (`src/controllers/apotheosis.rs`) produces one GEXF file per HNSW layer with the naming pattern `<stem>_layer<N>.gexf`. The `gexf` crate is used to generate these files.
 
 **HNSW (Hierarchical Navigable Small World).** A multilayer graph structure for approximate nearest-neighbor search, introduced by Malkov and Yashunin (2018). See section 4 for the reference. Search enters at the topmost layer (sparse, long-range connections) and descends layer by layer, narrowing the candidate set at each level until reaching the base layer. In APOTHEOSIS 2, the HNSW graph is implemented in `src/controllers/hnsw.rs`.
 
