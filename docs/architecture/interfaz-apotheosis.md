@@ -17,11 +17,11 @@
 
 ## 1. Interface Identity
 
-The crate is named `apotheosis2` (version `0.1.0`, Rust edition 2024). It is a Rust library for approximate nearest-neighbor (ANN) search over fuzzy hashes, primarily TLSH. The element documented here is the crate as a whole, not a running component or network service.
+The crate is named `apotheosis2`. It is a Rust library for approximate nearest-neighbor (ANN) search over fuzzy hashes, primarily TLSH. The element documented here is the crate as a whole, not a running component or network service.
 
-The interface of `apotheosis2` is exposed exclusively through the Rust API: the set of public types, traits, and functions re-exported from `src/lib.rs` via two root modules, `controllers` and `datalayer`. There is no CLI, REST, or RPC interface; the only way to interact with the library is as a dependency in a Rust project.
+The interface of `apotheosis2` is exposed exclusively through the Rust API: the set of public types, traits, and functions reachable from `src/lib.rs` via two root modules, `controllers` and `datalayer`. There is no CLI, REST, or RPC interface; the only way to interact with the library is as a dependency in a Rust project.
 
-This document covers the usage boundary of `apotheosis2` v`0.1.0`. Internal organization is in the module-view document; runtime topology in the C&C view.
+The crate version, Rust edition, minimum supported Rust version, and license are declared in `Cargo.toml` and are not restated here. Internal organization is in the module-view document; runtime topology in the C&C view.
 
 #### Environmental assumptions
 
@@ -38,21 +38,20 @@ Three categories: the `Apotheosis` facade (main entry point), the contract trait
 `Apotheosis` is the single entry point most clients need. It encapsulates three internal structures that it keeps in sync: the HNSW graph for approximate search, the radix tree for O(1) exact-match lookup, and the record vector for retrieving original data. These three fields are private; the only way in is through the methods below. The generic parameters (`R`, `D`, `M`, `M0`, `EF`, `HEURISTIC`) are documented in §4.
 
 ```rust
-#[derive(serde::Serialize, serde::Deserialize)]
-#[serde(bound(
-    serialize = "R: ApotheosisRecord + serde::Serialize, D: DistanceAlgorithm<R::MetricId> + serde::Serialize, R::MetricId: serde::Serialize",
-    deserialize = "R: ApotheosisRecord + serde::Deserialize<'de>, D: DistanceAlgorithm<R::MetricId> + serde::Deserialize<'de>, R::MetricId: serde::Deserialize<'de>"
-))]
-pub struct Apotheosis<R, D, const M: usize = 16, const M0: usize = 32, const EF: usize = 400, const HEURISTIC: bool = false>
+pub struct Apotheosis<
+    R,
+    D,
+    const M: usize = 16,
+    const M0: usize = 32,
+    const EF: usize = 400,
+    const HEURISTIC: bool = false,
+>
 where
     R: ApotheosisRecord,
     D: DistanceAlgorithm<R::MetricId> + Default,
-{
-    hnsw: Hnsw<D, R::MetricId, M, M0, EF, HEURISTIC>,
-    radix: RadixNode<u8, Option<usize>>,
-    records: Vec<R>,
-}
 ```
+
+The three fields it holds are private and do not appear in the signature above. The type derives `Serialize` and `Deserialize` with explicit serde bounds, which is what makes `dump` and `load` available when `R`, `D`, and `R::MetricId` are themselves serializable.
 
 #### 2.1.1 `new`
 
@@ -132,7 +131,7 @@ Does not return `Result`. No panics are identifiable in the normal flow.
 
 **Notes**
 
-The `ef_search` parameter is independent of the type-level constant `EF`. `EF` controls the exploration factor during graph construction; `ef_search` controls the search. The default value of `ef_search` when `None` is passed is `24`, which may be considerably smaller than `EF` (whose default is `400`). Passing `None` in environments that require high recall may produce suboptimal results.
+The `ef_search` parameter is independent of the type-level constant `EF`. `EF` controls the exploration factor during graph construction; `ef_search` controls the search. The default applied when `None` is passed is considerably smaller than the default `EF` the graph was built with, so passing `None` in settings that require high recall may produce suboptimal results.
 
 
 ---
@@ -151,11 +150,12 @@ where
 
 Serializes the full instance to disk at the path indicated by `path`. The generated file has the following binary format:
 
-- Bytes 0–3: magic bytes `APOT` in ASCII.
-- Bytes 4–7: value of `M` encoded as `u32` in little-endian.
-- Bytes 8–11: value of `M0` encoded as `u32` in little-endian.
-- Bytes 12–15: value of `EF` encoded as `u32` in little-endian.
-- Bytes 16 onward: body serialized with `bincode`.
+- Bytes 0-3: magic bytes `APOT` in ASCII.
+- Bytes 4-7: value of `M` encoded as `u32` in little-endian.
+- Bytes 8-11: value of `M0` encoded as `u32` in little-endian.
+- Bytes 12-15: value of `EF` encoded as `u32` in little-endian.
+- Byte 16: value of `HEURISTIC` as a single byte, 0 or 1.
+- Bytes 17 onward: body serialized with `bincode`.
 
 The format does not include an independent version field: internal changes to `Hnsw` or `RadixNode` between crate versions may produce silently incompatible files.
 
@@ -181,7 +181,7 @@ where
 
 **Semantics**
 
-Associated function (does not take `self`). Reads a file produced by `dump` and reconstructs an `Apotheosis` instance. Reads the first 16 bytes as the header: verifies the `APOT` magic and checks that the values of `M`, `M0`, and `EF` in the file match the const parameters of the type on which `load` is invoked. If validation passes, deserializes the body with `bincode`.
+Associated function (does not take `self`). Reads a file produced by `dump` and reconstructs an `Apotheosis` instance. Reads the header first: verifies the `APOT` magic and checks that the values of `M`, `M0`, `EF`, and `HEURISTIC` in the file match the const parameters of the type on which `load` is invoked. If validation passes, deserializes the body with `bincode`.
 
 **Error Handling**
 
@@ -189,12 +189,12 @@ Returns `Err(Box<dyn std::error::Error>)` in the following cases:
 
 - I/O error when opening the file or reading the header.
 - Incorrect magic bytes: message `"Invalid Apotheosis model file (missing magic bytes)"`.
-- Parameter mismatch: message `"Model parameter mismatch. File has M={m}, M0={m0}, EF={ef} but code expects M={M}, M0={M0}, EF={EF}"`.
+- Parameter mismatch: a message naming both the stored and the expected values of `M`, `M0`, `EF`, and `HEURISTIC`.
 - `bincode` deserialization error.
 
 **Notes**
 
-The bound `where Self: serde::de::DeserializeOwned` imposes the same restrictions as the `dump` bound on `serde::Serialize`. Validation is strict and rejects any `M`/`M0`/`EF` mismatch. On load, the internal HNSW `prng` field is re-initialized with seed `42`; this does not affect search results, only the random insertion level for future `insert` calls.
+The bound `where Self: serde::de::DeserializeOwned` imposes the same restrictions as the `dump` bound on `serde::Serialize`. Validation is strict and rejects a mismatch on any of the four graph parameters, but it does not cover the record type `R` or the distance type `D`. On load, the internal HNSW `prng` field is re-initialized with seed `42`; this does not affect search results, only the random insertion level for future `insert` calls.
 
 ---
 
@@ -585,7 +585,7 @@ Parameter of `search()`, type `Option<usize>`. The only runtime variation point.
 
 ## 5. Quality Attributes
 
-*For a full quality-attribute analysis see `atributos-calidad.md`.*
+*For a full quality-attribute analysis see [`quality-attributes.md`](quality-attributes.md).*
 
 #### Performance: sublinear search complexity
 
@@ -638,10 +638,12 @@ Examples assume `apotheosis2` and its direct dependencies are declared in `Cargo
 
 ```toml
 [dependencies]
-apotheosis2 = { path = "../apotheosis2" }
+apotheosis2 = { git = "https://github.com/reverseame/APOTHEOSIS", branch = "apotheosis2" }
 tlsh2 = { git = "https://github.com/danielhuici/tlsh", features = ["diff", "serde"] }
-serde_json = "1.0"  # only if using GenericJsonRecord or serde_json::Value directly
+serde_json = "*"  # only if using GenericJsonRecord or serde_json::Value directly
 ```
+
+Use a `path` dependency instead of the git one when working against a local checkout. Pin versions as your project requires; the snippet above is deliberately unpinned.
 
 #### Example 1: Search with provided types (TLSH)
 
@@ -663,7 +665,7 @@ fn main() {
 
     let query = TlshDefault::from_str("<tlsh_hash_a>").expect("invalid TLSH hash");
 
-    // Pass None for ef_search; the effective value is 24.
+    // Passing None for ef_search applies the library default; see section 4.
     let results: Vec<(u32, &SimpleTlshRecord)> = index.search(&query, 5, None);
 
     for (distance, record) in &results {
