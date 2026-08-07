@@ -98,7 +98,7 @@ fn multi_layer_search_correct_across_layers() {
         inserted.push(value);
     }
 
-    let layer_count = idx.hnsw.draw_model().len();
+    let layer_count = idx.draw_model().len();
     assert!(
         layer_count > 1,
         "dataset must produce upper layers to exercise the zero/upper index asymmetry, got {layer_count} layer(s)"
@@ -172,8 +172,8 @@ fn heuristic_produces_different_graph_than_greedy() {
             .collect()
     };
 
-    let greedy_edges = edges_for(greedy.hnsw.draw_model()[0].1.clone());
-    let heuristic_edges = edges_for(heuristic.hnsw.draw_model()[0].1.clone());
+    let greedy_edges = edges_for(greedy.draw_model()[0].1.clone());
+    let heuristic_edges = edges_for(heuristic.draw_model()[0].1.clone());
 
     assert_ne!(
         greedy_edges, heuristic_edges,

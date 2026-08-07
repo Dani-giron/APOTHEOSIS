@@ -48,10 +48,10 @@ fn sync_invariant_min_viable() {
     for i in 0..10u32 {
         idx.insert(SimpleNumberRecord::create(i.to_string())); // safe: keys are unique
     }
-    let zero_len = idx.hnsw.draw_model()[0].0.len();
-    assert_eq!(idx.records.len(), 10);
+    let zero_len = idx.draw_model()[0].0.len();
+    assert_eq!(idx.len(), 10);
     assert_eq!(zero_len, 10);
-    assert_eq!(idx.records.len(), zero_len);
+    assert_eq!(idx.len(), zero_len);
 }
 
 #[test]
@@ -60,10 +60,10 @@ fn sync_invariant_inverted_ratio() {
     for i in 0..10u32 {
         idx.insert(SimpleNumberRecord::create(i.to_string())); // safe: keys are unique
     }
-    let zero_len = idx.hnsw.draw_model()[0].0.len();
-    assert_eq!(idx.records.len(), 10);
+    let zero_len = idx.draw_model()[0].0.len();
+    assert_eq!(idx.len(), 10);
     assert_eq!(zero_len, 10);
-    assert_eq!(idx.records.len(), zero_len);
+    assert_eq!(idx.len(), zero_len);
 }
 
 #[test]
@@ -72,10 +72,10 @@ fn sync_invariant_equal_m_m0() {
     for i in 0..10u32 {
         idx.insert(SimpleNumberRecord::create(i.to_string())); // safe: keys are unique
     }
-    let zero_len = idx.hnsw.draw_model()[0].0.len();
-    assert_eq!(idx.records.len(), 10);
+    let zero_len = idx.draw_model()[0].0.len();
+    assert_eq!(idx.len(), 10);
     assert_eq!(zero_len, 10);
-    assert_eq!(idx.records.len(), zero_len);
+    assert_eq!(idx.len(), zero_len);
 }
 
 #[test]
@@ -84,10 +84,10 @@ fn sync_invariant_dense() {
     for i in 0..10u32 {
         idx.insert(SimpleNumberRecord::create(i.to_string())); // safe: keys are unique
     }
-    let zero_len = idx.hnsw.draw_model()[0].0.len();
-    assert_eq!(idx.records.len(), 10);
+    let zero_len = idx.draw_model()[0].0.len();
+    assert_eq!(idx.len(), 10);
     assert_eq!(zero_len, 10);
-    assert_eq!(idx.records.len(), zero_len);
+    assert_eq!(idx.len(), zero_len);
 }
 
 // ---------------------------------------------------------------------------

@@ -66,11 +66,11 @@ fn build_dataset_heuristic() -> ApoNumHeuristic {
 #[test]
 fn ff1_sync_invariant_default() {
     let idx = build_dataset_default();
-    let zero_layer_count = idx.hnsw.draw_model()[0].0.len();
-    assert_eq!(idx.records.len(), 10, "records must contain 10 entries");
+    let zero_layer_count = idx.draw_model()[0].0.len();
+    assert_eq!(idx.len(), 10, "records must contain 10 entries");
     assert_eq!(zero_layer_count, 10, "zero_layer must contain 10 nodes");
     assert_eq!(
-        idx.records.len(),
+        idx.len(),
         zero_layer_count,
         "records and zero_layer diverged"
     );
@@ -79,11 +79,11 @@ fn ff1_sync_invariant_default() {
 #[test]
 fn ff1_sync_invariant_small() {
     let idx = build_dataset_small();
-    let zero_layer_count = idx.hnsw.draw_model()[0].0.len();
-    assert_eq!(idx.records.len(), 10, "records must contain 10 entries");
+    let zero_layer_count = idx.draw_model()[0].0.len();
+    assert_eq!(idx.len(), 10, "records must contain 10 entries");
     assert_eq!(zero_layer_count, 10, "zero_layer must contain 10 nodes");
     assert_eq!(
-        idx.records.len(),
+        idx.len(),
         zero_layer_count,
         "records and zero_layer diverged"
     );
@@ -92,11 +92,11 @@ fn ff1_sync_invariant_small() {
 #[test]
 fn ff1_sync_invariant_heuristic() {
     let idx = build_dataset_heuristic();
-    let zero_layer_count = idx.hnsw.draw_model()[0].0.len();
-    assert_eq!(idx.records.len(), 10, "records must contain 10 entries");
+    let zero_layer_count = idx.draw_model()[0].0.len();
+    assert_eq!(idx.len(), 10, "records must contain 10 entries");
     assert_eq!(zero_layer_count, 10, "zero_layer must contain 10 nodes");
     assert_eq!(
-        idx.records.len(),
+        idx.len(),
         zero_layer_count,
         "records and zero_layer diverged"
     );

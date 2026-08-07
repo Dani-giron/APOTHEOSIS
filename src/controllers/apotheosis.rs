@@ -104,12 +104,7 @@ where
         self.records.is_empty()
     }
 
-    /// Read-only view of the HNSW graph structure, one entry per layer with
-    /// layer 0 first. Each entry holds the feature indices of that layer's
-    /// nodes and its edges as `(source, target, distance)`.
-    ///
-    /// This is the same data `draw()` exports as GEXF, exposed in memory so
-    /// callers can inspect the graph without writing files.
+    /// HNSW nodes and edges per layer, layer 0 first. Same data `draw()` writes as GEXF.
     #[allow(clippy::type_complexity)]
     pub fn draw_model(&self) -> Vec<(Vec<usize>, Vec<(String, String, f32)>)> {
         self.hnsw.draw_model()
