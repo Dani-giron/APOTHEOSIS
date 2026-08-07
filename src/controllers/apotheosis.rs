@@ -104,6 +104,17 @@ where
         self.records.is_empty()
     }
 
+    /// Read-only view of the HNSW graph structure, one entry per layer with
+    /// layer 0 first. Each entry holds the feature indices of that layer's
+    /// nodes and its edges as `(source, target, distance)`.
+    ///
+    /// This is the same data `draw()` exports as GEXF, exposed in memory so
+    /// callers can inspect the graph without writing files.
+    #[allow(clippy::type_complexity)]
+    pub fn draw_model(&self) -> Vec<(Vec<usize>, Vec<(String, String, f32)>)> {
+        self.hnsw.draw_model()
+    }
+
     /// Performs an approximate k-NN search. If the `MetricId` natively maps to a Radix Tree key
     /// (e.g. TLSH string), it jumps directly to the HNSW node to retrieve neighbors, bypassing full traversal.
     /// Otherwise, it performs a standard HNSW k-NN search using the `query`.
