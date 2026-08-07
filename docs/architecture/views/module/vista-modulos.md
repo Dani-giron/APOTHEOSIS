@@ -349,3 +349,10 @@ At the end of an `insert` that returns `true`, all of the following hold simulta
 - `hnsw.features[hnsw_node_index]` contains `item.search_id()`
 - `radix.find(key).data == Some(Some(hnsw_node_index))` (if the metric has an exact key)
 - `records[hnsw_node_index] == item`
+
+## Related Documents
+
+- [`docs/architecture/interfaz-apotheosis.md`](../../interfaz-apotheosis.md): the public methods documented here (`insert`, `search`) with full signatures, error handling, and usage examples.
+- [`docs/architecture/quality-attributes.md`](../../quality-attributes.md): design drivers behind the module decomposition and the trade-offs summarized as stubs in section 6.
+- [`docs/architecture/directory.md`](../../directory.md): glossary and data dictionary for the types cataloged in this view.
+- [`docs/architecture/roadmap.md`](../../roadmap.md): audience guide and relationship between this view and the C&C and deployment views.

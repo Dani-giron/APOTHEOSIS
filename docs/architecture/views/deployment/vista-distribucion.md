@@ -189,6 +189,7 @@ The README documents build and execution commands exclusively in bash (Unix) syn
 
 ## Related Documents
 
-- [`docs/architecture/quality-attributes.md`](../../quality-attributes.md): documents the design drivers behind the deployment decisions in this view. Section §2.1 (performance) justifies the Cargo compilation profiles (§2.4); §2.2 (persistence integrity) justifies the binary header format (§2.3); §5.4 explains the tlsh2 git-fork trade-off (§2.2 dependencies).
+- [`docs/architecture/interfaz-apotheosis.md`](../../interfaz-apotheosis.md): the crate's public API, including how to declare it and its dependencies in a client's `Cargo.toml`.
+- [`docs/architecture/quality-attributes.md`](../../quality-attributes.md): documents the design drivers behind the deployment decisions in this view. Section §2.1 (performance) justifies the Cargo compilation profiles (§2.4); §2.2 (persistence integrity) justifies the binary header format (§2.3); §5.3 explains the tlsh2 git-fork trade-off (§2.2 dependencies).
 - [`docs/architecture/directory.md`](../../directory.md): glossary and data dictionary for types and artifacts appearing in this view.
 - [`docs/architecture/roadmap.md`](../../roadmap.md): audience guide and relationship between this view and the module and C&C views.

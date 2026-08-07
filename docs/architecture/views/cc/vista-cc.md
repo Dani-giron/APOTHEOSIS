@@ -203,6 +203,7 @@ When the hash is not in the index, `Apotheosis` delegates to `Hnsw::knn_search`,
 
 ## Related Documents
 
+- [`docs/architecture/interfaz-apotheosis.md`](../../interfaz-apotheosis.md): the public API behind the `api` port documented here: full method signatures, error handling, and usage examples.
 - [`docs/architecture/quality-attributes.md`](../../quality-attributes.md): documents the design drivers behind the runtime behavior shown in this view. Section §2.1 (performance) justifies the fast-path and the HNSW traversal; §5.1 explains the synchrony invariant that the insertion scenario (§2.4 Scenario 1) preserves.
 - [`docs/architecture/directory.md`](../../directory.md): glossary and data dictionary for types appearing in this view (`Apotheosis`, `Hnsw`, `RadixNode`).
 - [`docs/architecture/roadmap.md`](../../roadmap.md): audience guide and relationship between this view and the module and deployment views.
