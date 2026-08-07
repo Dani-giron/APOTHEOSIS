@@ -706,6 +706,7 @@ impl ApotheosisRecord for MyRecord {
 fn main() {
     let mut index: Apotheosis<MyRecord, TlshDistance> = Apotheosis::new();
 
+    // Replace with a real TLSH hash string; this placeholder will fail to parse.
     let record = MyRecord {
         hash: TlshDefault::from_str("<tlsh_hash_a>").expect("invalid TLSH hash"),
         label: "example".to_string(),
