@@ -213,7 +213,7 @@ where
     ///
     /// # Parameters
     /// * `path` - Base filename for output (e.g., "model" creates "model_layer0.gexf", "model_layer1.gexf", etc.)
-    pub fn draw<P: AsRef<Path>>(&self, path: P) {
+    pub fn draw<P: AsRef<Path>>(&self, path: P) -> Result<(), Box<dyn std::error::Error>> {
         let base_path = path.as_ref();
 
         let layer_gexfs = self.hnsw.draw_model();
@@ -240,8 +240,10 @@ where
                 );
             }
 
-            let _ = self.save_gexf(base_path, layer_idx, &gexf);
+            self.save_gexf(base_path, layer_idx, &gexf)?;
         }
+
+        Ok(())
     }
 
     // Once draw is built, we need to add the attribute schema to the GEXF XML
@@ -272,7 +274,12 @@ where
         xml
     }
 
-    fn save_gexf(&self, base_path: &Path, layer_idx: usize, gexf: &Gexf) -> std::io::Result<()> {
+    fn save_gexf(
+        &self,
+        base_path: &Path,
+        layer_idx: usize,
+        gexf: &Gexf,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let mut file_path = PathBuf::from(base_path);
 
         if let Some(stem) = file_path.file_stem().and_then(|s| s.to_str()) {
@@ -285,9 +292,9 @@ where
         }
 
         let fixed_xml = if !self.records.is_empty() {
-            self.add_attribute_schema(gexf.to_string().unwrap(), self.records[0].get_attributes())
+            self.add_attribute_schema(gexf.to_string()?, self.records[0].get_attributes())
         } else {
-            gexf.to_string().unwrap()
+            gexf.to_string()?
         };
 
         fs::write(file_path, fixed_xml)?;
