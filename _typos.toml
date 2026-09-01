@@ -3,3 +3,11 @@
 # typos uses an English dictionary and would flag these as misspellings.
 "Estratégicos" = "Estratégicos"
 Ciberseguridad = "Ciberseguridad"
+# Spanish filename convention used across the three architecture views
+# (vista-modulos.md, vista-cc.md, vista-distribucion.md).
+distribucion = "distribucion"
+
+[files]
+# Vendored, minified third-party JS. Its internal identifiers are not
+# meant to be readable text and trigger constant false positives.
+extend-exclude = ["docs/mermaid.min.js"]
