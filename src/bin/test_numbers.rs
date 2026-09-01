@@ -22,7 +22,9 @@ pub fn main() {
     // println!("Queries: {:?}", random_queries);
 
     for &n in &random_numbers {
-        features.push(SimpleNumberRecord::create(n.to_string()))
+        features.push(
+            SimpleNumberRecord::create(n.to_string()).expect("internally generated, always valid"),
+        )
     }
 
     let creation_start = Instant::now();

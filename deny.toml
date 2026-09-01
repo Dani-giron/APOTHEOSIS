@@ -38,5 +38,8 @@ deny = []
 unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
-# tlsh2 is fetched directly from GitHub - this is intentional.
-allow-git = ["https://github.com/danielhuici/tlsh"]
+
+allow-git = [
+    "https://github.com/danielhuici/tlsh",
+    "https://github.com/danielhuici/gexf",
+]
