@@ -75,7 +75,7 @@ fn draw_produces_one_gexf_file_per_layer() {
         idx.insert(SimpleNumberRecord::create(i.to_string()));
     }
 
-    let layer_count = idx.hnsw.draw_model().len();
+    let layer_count = idx.draw_model().len();
     idx.draw(&base);
 
     for n in 0..layer_count {

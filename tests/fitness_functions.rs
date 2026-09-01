@@ -29,10 +29,10 @@ fn sync_invariant_holds_after_bulk_insert() {
         idx.insert(SimpleNumberRecord::create(i.to_string()));
     }
 
-    let hnsw_len = idx.hnsw.draw_model()[0].0.len();
+    let hnsw_len = idx.draw_model()[0].0.len();
 
     assert_eq!(
-        idx.records.len(),
+        idx.len(),
         50,
         "records[] should contain exactly 50 entries after 50 inserts"
     );
@@ -41,7 +41,7 @@ fn sync_invariant_holds_after_bulk_insert() {
         "HNSW zero_layer should contain exactly 50 nodes after 50 inserts"
     );
     assert_eq!(
-        idx.records.len(),
+        idx.len(),
         hnsw_len,
         "records[] and HNSW must be in sync - parallel structures diverged"
     );
@@ -211,18 +211,14 @@ fn sync_invariant_holds_after_duplicate_insert() {
     let second = idx.insert(SimpleNumberRecord::create("7".to_string()));
     assert!(!second, "duplicate insert must return false");
 
-    let zero_layer_count = idx.hnsw.draw_model()[0].0.len();
-    assert_eq!(
-        idx.records.len(),
-        1,
-        "records must not grow on duplicate insert"
-    );
+    let zero_layer_count = idx.draw_model()[0].0.len();
+    assert_eq!(idx.len(), 1, "records must not grow on duplicate insert");
     assert_eq!(
         zero_layer_count, 1,
         "zero_layer must not grow on duplicate insert"
     );
     assert_eq!(
-        idx.records.len(),
+        idx.len(),
         zero_layer_count,
         "records and zero_layer diverged after duplicate"
     );

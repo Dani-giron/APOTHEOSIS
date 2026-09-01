@@ -110,6 +110,12 @@ where
         self.records.is_empty()
     }
 
+    /// HNSW nodes and edges per layer, layer 0 first. Same data `draw()` writes as GEXF.
+    #[allow(clippy::type_complexity)]
+    pub fn draw_model(&self) -> Vec<(Vec<usize>, Vec<(String, String, f32)>)> {
+        self.hnsw.draw_model()
+    }
+
     /// Performs an approximate k-NN search. If the `MetricId` natively maps to a Radix Tree key
     /// (e.g. TLSH string), it jumps directly to the HNSW node to retrieve neighbors, bypassing full traversal.
     /// Otherwise, it performs a standard HNSW k-NN search using the `query`.
