@@ -12,6 +12,12 @@ use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
+/// Last path segment of the type name, e.g.
+/// "apotheosis2::datalayer::algorithms::TlshDistance" -> "TlshDistance".
+fn distance_name<T>() -> &'static str {
+    std::any::type_name::<T>().rsplit("::").next().unwrap()
+}
+
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(bound(
     serialize = "R: ApotheosisRecord + serde::Serialize, D: DistanceAlgorithm<R::MetricId> + serde::Serialize, R::MetricId: serde::Serialize",
@@ -165,6 +171,9 @@ where
         file.write_all(&(M0 as u32).to_le_bytes())?;
         file.write_all(&(EF as u32).to_le_bytes())?;
         file.write_all(&[HEURISTIC as u8])?;
+        let name = distance_name::<D>().as_bytes();
+        file.write_all(&[u8::try_from(name.len())?])?;
+        file.write_all(name)?;
 
         // Then write the model data
         bincode::serialize_into(file, self)?;
@@ -177,7 +186,7 @@ where
     {
         let mut file = File::open(path)?;
 
-        // Read and verify header (17 bytes)
+        // Read and verify header (17 bytes + distance type name)
         let mut header = [0u8; 17];
         file.read_exact(&mut header)?;
 
@@ -195,6 +204,22 @@ where
                 "Model parameter mismatch. File has M={}, M0={}, EF={}, HEURISTIC={} but code expects M={}, M0={}, EF={}, HEURISTIC={}",
                 m, m0, ef, heuristic, M, M0, EF, HEURISTIC
             ).into());
+        }
+
+        // Explicit check of distance type (does not rely on bincode)
+        let mut name_len = [0u8; 1];
+        file.read_exact(&mut name_len)?;
+        let mut name = vec![0u8; name_len[0] as usize];
+        file.read_exact(&mut name)?;
+        let file_distance = String::from_utf8_lossy(&name);
+
+        let expected = distance_name::<D>();
+        if file_distance != expected {
+            return Err(format!(
+                "Distance type mismatch. File was built with {} but is being loaded as {}",
+                file_distance, expected
+            )
+            .into());
         }
 
         let decoded = bincode::deserialize_from(file)?;
