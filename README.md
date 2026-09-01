@@ -63,7 +63,7 @@ fn main() {
 
 ### Persistence and export
 
-A built model can be saved to disk and loaded back. `load()` validates the M, M0, EF and HEURISTIC parameters in the file header against the loading type, and refuses to load on any mismatch. The HNSW graph can also be exported to GEXF files (one per layer).
+A built model can be saved to disk and loaded back. `load()` validates the M, M0, EF and HEURISTIC parameters and the distance type recorded in the file header against the loading type, and refuses to load on any mismatch. The HNSW graph can also be exported to GEXF files (one per layer).
 
 ```rust
 // dump() and load() return Result.

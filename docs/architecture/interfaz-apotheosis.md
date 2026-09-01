@@ -19,7 +19,7 @@
 
 The crate is named `apotheosis2`. It is a Rust library for approximate nearest-neighbor (ANN) search over fuzzy hashes, primarily TLSH. The element documented here is the crate as a whole, not a running component or network service.
 
-The interface of `apotheosis2` is exposed exclusively through the Rust API: the set of public types, traits, and functions reachable from `src/lib.rs` via two root modules, `controllers` and `datalayer`. There is no CLI, REST, or RPC interface; the only way to interact with the library is as a dependency in a Rust project.
+The interface of `apotheosis2` is exposed exclusively through the Rust API: the set of public types, traits, and functions reachable from `src/lib.rs` via three root modules, `controllers`, `datalayer`, and `export`. There is no CLI, REST, or RPC interface; the only way to interact with the library is as a dependency in a Rust project.
 
 The crate version, Rust edition, minimum supported Rust version, and license are declared in `Cargo.toml` and are not restated here. Internal organization is in the module-view document; runtime topology in the C&C view.
 
@@ -35,7 +35,7 @@ Three categories: the `Apotheosis` facade (main entry point), the contract trait
 
 ### 2.1 `Apotheosis` Facade
 
-`Apotheosis` is the single entry point most clients need. It encapsulates three internal structures that it keeps in sync: the HNSW graph for approximate search, the radix tree for O(1) exact-match lookup, and the record vector for retrieving original data. These three fields are private; the only way in is through the methods below. The generic parameters (`R`, `D`, `M`, `M0`, `EF`, `HEURISTIC`) are documented in §4.
+`Apotheosis` is the single entry point most clients need. It encapsulates three internal structures that it keeps in sync: the HNSW graph for approximate search, the radix tree for O(1) exact-match lookup, and the record vector for retrieving original data. These three fields are private; the only way in is through the methods below. Small read accessors — `len()`, `is_empty()`, `draw_model()` (structural view of the graph layers), and `record(index)` — expose counts and read-only views without breaking encapsulation; the `export::gexf` module and the test suite consume the facade through them. The generic parameters (`R`, `D`, `M`, `M0`, `EF`, `HEURISTIC`) are documented in §4.
 
 ```rust
 pub struct Apotheosis<
@@ -85,7 +85,7 @@ Inserts a record into all three internal structures: the `search_id()` of the re
 
 The meaning of the return value depends on whether the `MetricId` type activates the radix fast-path:
 
-- If `item.search_id().to_radix_key()` returns `Some(key)` (fast-path active): the method checks whether `key` already exists in the radix tree. If it does, a warning is printed to `stdout` and the method returns `false`. If it does not, the record is inserted into the radix tree and `records` and the method returns `true`.
+- If `item.search_id().to_radix_key()` returns `Some(key)` (fast-path active): the method checks whether `key` already exists in the radix tree. If it does, a warning is emitted and the method returns `false`. If it does not, the record is inserted into the radix tree and `records` and the method returns `true`.
 - If `item.search_id().to_radix_key()` returns `None` (fast-path inactive): no duplicate check is performed. The method always inserts into `records` and always returns `true`. `true` in this path means the insertion was attempted, not that the item is unique in the index.
 
 **Error Handling**
@@ -94,7 +94,7 @@ Does not return `Result`. No panics are identifiable in the code of this method.
 
 **Notes**
 
-The duplicate warning is printed via `println!`, not through the `tracing` crate the rest of the codebase uses for logging. It is not propagated as an error to the caller, and it goes to stdout unconditionally, with no way for a library consumer to redirect or silence it. Additionally, `search_id()` is called twice on the same `item` within the method (once to derive the radix key, once for HNSW insertion): if an implementation of `search_id()` had side effects, the result could be unexpected.
+The duplicate warning is informational only and is not propagated as an error to the caller. Additionally, `search_id()` is called twice on the same `item` within the method (once to derive the radix key, once for HNSW insertion): if an implementation of `search_id()` had side effects, the result could be unexpected.
 
 
 ---
@@ -155,7 +155,9 @@ Serializes the full instance to disk at the path indicated by `path`. The genera
 - Bytes 8-11: value of `M0` encoded as `u32` in little-endian.
 - Bytes 12-15: value of `EF` encoded as `u32` in little-endian.
 - Byte 16: value of `HEURISTIC` as a single byte, 0 or 1.
-- Bytes 17 onward: body serialized with `bincode`.
+- Byte 17: length in bytes of the distance type name, as a single byte.
+- Next N bytes: the distance type name in UTF-8 (e.g. `TlshDistance`).
+- Remaining bytes: body serialized with `bincode`.
 
 The format does not include an independent version field: internal changes to `Hnsw` or `RadixNode` between crate versions may produce silently incompatible files.
 
@@ -181,7 +183,7 @@ where
 
 **Semantics**
 
-Associated function (does not take `self`). Reads a file produced by `dump` and reconstructs an `Apotheosis` instance. Reads the header first: verifies the `APOT` magic and checks that the values of `M`, `M0`, `EF`, and `HEURISTIC` in the file match the const parameters of the type on which `load` is invoked. If validation passes, deserializes the body with `bincode`.
+Associated function (does not take `self`). Reads a file produced by `dump` and reconstructs an `Apotheosis` instance. Reads the header first: verifies the `APOT` magic, checks that the values of `M`, `M0`, `EF`, and `HEURISTIC` in the file match the const parameters of the type on which `load` is invoked, and checks that the distance type name recorded in the file matches the `D` the loading type was compiled with. If validation passes, deserializes the body with `bincode`.
 
 **Error Handling**
 
@@ -190,37 +192,39 @@ Returns `Err(Box<dyn std::error::Error>)` in the following cases:
 - I/O error when opening the file or reading the header.
 - Incorrect magic bytes: message `"Invalid Apotheosis model file (missing magic bytes)"`.
 - Parameter mismatch: a message naming both the stored and the expected values of `M`, `M0`, `EF`, and `HEURISTIC`.
+- Distance type mismatch: a message naming both the distance the file was built with and the one it is being loaded as.
 - `bincode` deserialization error.
 
 **Notes**
 
-The bound `where Self: serde::de::DeserializeOwned` imposes the same restrictions as the `dump` bound on `serde::Serialize`. Validation is strict and rejects a mismatch on any of the four graph parameters, but it does not cover the record type `R` or the distance type `D`. On load, the internal HNSW `prng` field is re-initialized with seed `42`; this does not affect search results, only the random insertion level for future `insert` calls.
+The bound `where Self: serde::de::DeserializeOwned` imposes the same restrictions as the `dump` bound on `serde::Serialize`. Validation is strict and rejects a mismatch on any of the four graph parameters and on the distance type name, but it does not cover the record type `R`. On load, the internal HNSW `prng` field is re-initialized with seed `42`; this does not affect search results, only the random insertion level for future `insert` calls.
 
 ---
 
-#### 2.1.6 `draw`
+#### 2.1.6 `export::gexf::draw`
 
 **Syntax**
 
 ```rust
-pub fn draw<P: AsRef<Path>>(&self, path: P)
+// free function in the export::gexf module, not a facade method
+pub fn draw<R, D, /* const params */, P: AsRef<Path>>(model: &Apotheosis<...>, path: P)
 ```
 
 **Semantics**
 
-Exports the HNSW graph structure to GEXF files for visualization in external tools such as Gephi. Generates one file per graph layer (layer 0 plus all existing upper layers). The file name pattern is `{stem}_layer{N}.gexf`, where `{stem}` is the base name of `path` without extension and `N` is the layer index starting at `0`. If `path` has no recognizable base name, the pattern is `layer{N}.gexf`.
+GEXF export lives in the `export::gexf` module and consumes the facade through its public read API (`draw_model()`, `record()`). Exports the HNSW graph structure to GEXF files for visualization in external tools such as Gephi. Generates one file per graph layer (layer 0 plus all existing upper layers). The file name pattern is `{stem}_layer{N}.gexf`, where `{stem}` is the base name of `path` without extension and `N` is the layer index starting at `0`. If `path` has no recognizable base name, the pattern is `layer{N}.gexf`.
 
-Each GEXF file contains nodes (one per entry in that HNSW layer, identified by its feature index), undirected edges weighted by the distance between connected nodes, and node attributes obtained from `R::get_attributes()`. The attribute schema is injected manually into the generated XML due to limitations of the `gexf` dependency.
+Each GEXF file contains nodes (one per entry in that HNSW layer, identified by its feature index), undirected edges weighted by the distance between connected nodes, and node attributes obtained from `R::get_attributes()`. The attribute schema is declared by the `gexf` dependency itself, which auto-collects the node attribute keys.
 
 **Error Handling**
 
-Does not return `Result`. I/O errors when writing each GEXF file are silently discarded: the code uses `let _ = self.save_gexf(...)`. GEXF XML serialization errors (`gexf.to_string().unwrap()`) produce a panic.
+Does not return `Result`. I/O errors when writing each GEXF file are silently discarded: the code uses `let _ = save_gexf(...)`. GEXF XML serialization errors (`gexf.to_string().unwrap()`) produce a panic.
 
 
 
 **Preconditions / Postconditions**
 
-If `self.records` is empty, the files are generated regardless, but without nodes or attribute schema.
+If the model is empty, the files are generated regardless, but without nodes or attribute schema.
 
 ### 2.2 Contract Traits
 
@@ -345,12 +349,12 @@ Same as `SimpleRecord<u32>`: `ApotheosisRecord`, `Clone`, `serde::Serialize`, `s
 **Constructor**
 
 ```rust
-pub fn create(s: String) -> Self
+pub fn create(s: String) -> Result<Self, Box<dyn std::error::Error>>
 ```
 
 **Notes**
 
-`create` panics if `s` is not parseable as `u32`. Compatible with `dump`/`load`.
+`create` returns `Err` if `s` is not parseable as `u32`, with the offending input in the message. Compatible with `dump`/`load`.
 
 ---
 
@@ -367,12 +371,12 @@ Same as `SimpleRecord<TlshDefault>`: `ApotheosisRecord`, `Clone`, `serde::Serial
 **Constructor**
 
 ```rust
-pub fn create(s: String) -> Self
+pub fn create(s: String) -> Result<Self, Box<dyn std::error::Error>>
 ```
 
 **Notes**
 
-`create` panics if `s` is not a valid TLSH hash string. The client must add `tlsh2` as a direct dependency to construct `TlshDefault` values for queries. Compatible with `dump`/`load`.
+`create` returns `Err` if `s` is not a valid TLSH hash string. The client must add `tlsh2` as a direct dependency to construct `TlshDefault` values for queries. Compatible with `dump`/`load`.
 
 ---
 
@@ -395,12 +399,12 @@ pub struct GenericJsonRecord {
 **Constructor**
 
 ```rust
-pub fn create(s: String, metadata: serde_json::Value) -> Self
+pub fn create(s: String, metadata: serde_json::Value) -> Result<Self, Box<dyn std::error::Error>>
 ```
 
 **Notes**
 
-`create` panics if `s` is not a valid TLSH hash string. `get_attributes()` serializes `metadata` as flat key-value pairs: if `metadata` is a JSON object, one entry per top-level field; otherwise a single entry with key `"metadata"`. The `metadata` field is `serde_json::Value`, which is not re-exported by `apotheosis2`; the client must add `serde_json` as a direct dependency. Compatible with `dump`/`load`.
+`create` returns `Err` if `s` is not a valid TLSH hash string. `get_attributes()` serializes `metadata` as flat key-value pairs: if `metadata` is a JSON object, one entry per top-level field; otherwise a single entry with key `"metadata"`. The `metadata` field is `serde_json::Value`, which is not re-exported by `apotheosis2`; the client must add `serde_json` as a direct dependency. Compatible with `dump`/`load`.
 
 ---
 
@@ -541,15 +545,15 @@ The crate does not adopt a uniform error-handling strategy: different methods us
 
 #### `Result<_, Box<dyn std::error::Error>>`
 
-Used by `dump` and `load`. The error type is a dynamic trait object that can wrap any I/O or serialization error. The caller must match on or propagate the error with `?`. There are no structured error types that would allow programmatic distinction between the possible causes (I/O failure, parameter mismatch, malformed file).
+Used by `dump`, `load`, and the `create` record constructors. The error type is a dynamic trait object that can wrap any I/O or serialization error. The caller must match on or propagate the error with `?`. There are no structured error types that would allow programmatic distinction between the possible causes (I/O failure, parameter mismatch, malformed file).
 
 #### Panics
 
-`draw` can panic if the internal GEXF XML serialization fails (`gexf.to_string().unwrap()` at two call sites in `save_gexf`). No other public method has identifiable panics in the normal flow. The constructors `SimpleTlshRecord::create` and `GenericJsonRecord::create` panic if the input string is not a valid TLSH hash; `SimpleNumberRecord::create` panics if the input string is not parseable as `u32`.
+`export::gexf::draw` can panic if the internal GEXF XML serialization fails (`gexf.to_string().unwrap()` in `save_gexf`). No public facade method has identifiable panics in the normal flow; the `create` record constructors return `Err` on malformed input instead of panicking.
 
 #### Absence of error return
 
-`insert` returns `bool` rather than `Result`: duplicate keys are signaled with `false` and a message printed to `stdout`, without propagating an error to the caller. `draw` has no explicit error paths: I/O errors when writing each GEXF file are silently discarded via `let _ = self.save_gexf(...)`.
+`insert` returns `bool` rather than `Result`: duplicate keys are signaled with `false` and a warning, without propagating an error to the caller. `export::gexf::draw` has no explicit error paths: I/O errors when writing each GEXF file are silently discarded via `let _ = save_gexf(...)`.
 
 ---
 
@@ -658,10 +662,10 @@ use tlsh2::TlshDefault;
 fn main() {
     let mut index: Apotheosis<SimpleTlshRecord, TlshDistance> = Apotheosis::new();
 
-    // SimpleTlshRecord::create panics on invalid TLSH strings.
+    // SimpleTlshRecord::create returns Err on invalid TLSH strings.
     // Replace with real TLSH hash strings produced by your data pipeline.
-    index.insert(SimpleTlshRecord::create("<tlsh_hash_a>".to_string()));
-    index.insert(SimpleTlshRecord::create("<tlsh_hash_b>".to_string()));
+    index.insert(SimpleTlshRecord::create("<tlsh_hash_a>".to_string()).expect("invalid TLSH hash"));
+    index.insert(SimpleTlshRecord::create("<tlsh_hash_b>".to_string()).expect("invalid TLSH hash"));
 
     let query = TlshDefault::from_str("<tlsh_hash_a>").expect("invalid TLSH hash");
 
@@ -730,9 +734,9 @@ use apotheosis2::datalayer::record::SimpleNumberRecord;
 
 fn main() {
     let mut index: Apotheosis<SimpleNumberRecord, NormalDistance> = Apotheosis::new();
-    index.insert(SimpleNumberRecord::create("10".to_string()));
-    index.insert(SimpleNumberRecord::create("20".to_string()));
-    index.insert(SimpleNumberRecord::create("30".to_string()));
+    index.insert(SimpleNumberRecord::create("10".to_string()).unwrap());
+    index.insert(SimpleNumberRecord::create("20".to_string()).unwrap());
+    index.insert(SimpleNumberRecord::create("30".to_string()).unwrap());
 
     index.dump("my_model.bin").expect("dump failed");
 
@@ -772,9 +776,9 @@ impl Default for SaturatingSquaredDiff {
 
 fn main() {
     let mut index: Apotheosis<SimpleNumberRecord, SaturatingSquaredDiff> = Apotheosis::new();
-    index.insert(SimpleNumberRecord::create("42".to_string()));
-    index.insert(SimpleNumberRecord::create("100".to_string()));
-    index.insert(SimpleNumberRecord::create("200".to_string()));
+    index.insert(SimpleNumberRecord::create("42".to_string()).unwrap());
+    index.insert(SimpleNumberRecord::create("100".to_string()).unwrap());
+    index.insert(SimpleNumberRecord::create("200".to_string()).unwrap());
 
     let results = index.search(&60_u32, 2, Some(50));
     for (distance, record) in &results {

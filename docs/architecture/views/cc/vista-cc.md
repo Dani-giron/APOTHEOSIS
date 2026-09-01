@@ -46,8 +46,8 @@ The diagram shows the system at runtime. The active elements are: ClientApplicat
 | Field | Content |
 |---|---|
 | Type | `<<Component>> <<Server>>` |
-| Responsibility | Public system facade. Single entry point at runtime. Receives client calls, decides which path each search takes (fast-path or ANN path), coordinates Hnsw and RadixTree keeping them synchronized, and handles persistence and export. |
-| Ports | `api`: receives client calls (`insert`, `search`, `dump`, `load`, `draw`); `index-hnsw`: delegates ANN insertion and search to Hnsw; `index-radix`: delegates exact insertion and lookup to RadixTree; `persistence`: reads from and writes to FileSystem |
+| Responsibility | Public system facade. Single entry point at runtime. Receives client calls, decides which path each search takes (fast-path or ANN path), coordinates Hnsw and RadixTree keeping them synchronized, and handles persistence. GEXF export is performed by the `export::gexf` library function, which reads through this facade. |
+| Ports | `api`: receives client calls (`insert`, `search`, `dump`, `load`, and the read accessors used by `export::gexf::draw`); `index-hnsw`: delegates ANN insertion and search to Hnsw; `index-radix`: delegates exact insertion and lookup to RadixTree; `persistence`: reads from and writes to FileSystem |
 | Subarchitecture | Ports `index-hnsw`, `index-radix`, and `persistence` are internal ports delegated from the external port `api`. See interface delegation in section 2.3 |
 | Module | `controllers/apotheosis.rs`; see `vista-modulos.md` |
 
@@ -71,14 +71,14 @@ The diagram shows the system at runtime. The active elements are: ClientApplicat
 | Field | Content |
 |---|---|
 | Type | `<<External>>` |
-| Responsibility | External persistent data store. Involved in `dump`/`load` to serialize and recover the full model, and in `draw` to write the `.gexf` files consumed by Gephi. |
+| Responsibility | External persistent data store. Involved in `dump`/`load` to serialize and recover the full model, and in `export::gexf::draw` to write the `.gexf` files consumed by Gephi. |
 | Ports | `io`: bidirectional read/write of the serialized model; `gexf-out`: output of the per-layer `.gexf` files to Gephi |
 
 #### Gephi
 | Field | Content |
 |---|---|
 | Type | `<<Component>> <<External>>` |
-| Responsibility | External visualization tool. Opens the `.gexf` files produced by `draw()` for visual inspection of the HNSW graph. Not coupled at runtime with APOTHEOSIS 2; it consumes the files independently. |
+| Responsibility | External visualization tool. Opens the `.gexf` files produced by `export::gexf::draw()` for visual inspection of the HNSW graph. Not coupled at runtime with APOTHEOSIS 2; it consumes the files independently. |
 | Ports | `gexf-in`: reads the `.gexf` files from FileSystem |
 
 ### 2.2 Relations and Properties
@@ -93,7 +93,7 @@ The course notes define *attachment* as the association between component ports 
 | `apo↔radix-lookup` | `<<call-return>>` | `Apotheosis::index-radix` | `RadixTree::lookup` | Input: `key: &[u8]` / Output: `Option<&RadixNode>` (Apotheosis extracts `Option<usize>` from `node.data`). If `Some(index)`: fast-path; if `None`: ANN path | First operation in every `search()` call. Its result determines which path is taken |
 | `apo→radix-insert` | `<<call-return>>` | `Apotheosis::index-radix` | `RadixTree::insert` | Input: `(key: Vec<u8>, index: usize)` / no return | Executed on every new insertion, always alongside `hnsw-insert` |
 | `apo↔fs-io` | `<<call-return>>` | `Apotheosis::persistence` | `FileSystem::io` | `dump(path)` writes to FS; `load(path)` reads from FS into Apotheosis | Bidirectional. `load` reconstructs the full model in memory |
-| `apo→fs-gexf` | `<<call-return>>` | `Apotheosis::persistence` | `FileSystem::gexf-out` | `draw(path)` writes one `.gexf` file per HNSW layer with pattern `<stem>_layer<N>.gexf` | Write only. No return value |
+| `apo→fs-gexf` | `<<call-return>>` | `Apotheosis::persistence` | `FileSystem::gexf-out` | `export::gexf::draw(&model, path)` writes one `.gexf` file per HNSW layer with pattern `<stem>_layer<N>.gexf` | Write only. No return value |
 | `fs→gephi` | `<<file-read>>` | `FileSystem::gexf-out` | `Gephi::gexf-in` | `.gexf` file | Asynchronous with respect to APOTHEOSIS 2. Gephi opens the file independently; no runtime coupling |
 
 ### 2.3 Element Interfaces
@@ -115,7 +115,7 @@ Internal interfaces of Hnsw and RadixTree are documented in `vista-modulos.md`. 
 | `search(query, k, ef_search)` | Query hash, number of desired results K, optional exploration factor | `Vec<(dist, &R)>` | Returns the K most similar elements sorted by ascending distance. Takes the fast-path if the hash exists in the RadixTree; ANN path via HNSW otherwise |
 | `dump(path)` | File path | (none) | Serializes the full model (indices + records) to disk |
 | `load(path)` | File path | (none) | Reconstructs the model from disk, restoring the synchrony invariant |
-| `draw(path)` | Base path | (none) | Exports the HNSW graph as N `_layer<N>.gexf` files, one per layer |
+| `draw_model()`, `record(index)` | (none) / record index | Layer structure / `Option<&R>` | Read accessors; `export::gexf::draw` consumes them to export the HNSW graph as N `_layer<N>.gexf` files |
 
 **3. Data types**
 - `R`: generic type implementing `ApotheosisRecord`. Defined in `datalayer/record.rs`; see `vista-modulos.md`.

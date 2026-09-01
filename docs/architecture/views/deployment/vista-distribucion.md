@@ -96,16 +96,18 @@ Offset  Size    Content
 8       4 B     M0 as u32 little-endian  (max neighbors, layer 0)
 12      4 B     EF as u32 little-endian  (exploration factor)
 16      1 B     HEURISTIC as a single byte (0 or 1)
-17      var.    Apotheosis struct encoded with bincode
+17      1 B     Length N of the distance type name (u8)
+18      N B     Distance type name in UTF-8 (e.g. "TlshDistance")
+then    var.    Apotheosis struct encoded with bincode
 ```
 
-The header makes the format self-describing with respect to the compile-time graph parameters: `load` reads `M`, `M0`, `EF`, and `HEURISTIC` from the file and compares them against the const-generics the loading type was compiled with. Any mismatch returns an error naming both the stored and the expected values, so the caller can identify the problem without inspecting the binary. Only if all four match does bincode deserialization proceed. The file name is free; the library imposes no convention.
+The header makes the format self-describing with respect to the compile-time graph parameters and the distance type: `load` reads `M`, `M0`, `EF`, `HEURISTIC`, and the distance type name from the file and compares them against the type the model is being loaded as. Any mismatch returns an error naming both the stored and the expected values, so the caller can identify the problem without inspecting the binary. Only if everything matches does bincode deserialization proceed. The file name is free; the library imposes no convention.
 
-The header does not cover the record type `R` or the distance type `D`, so a file written with one distance function can be handed to a type expecting another without the header objecting.
+The header does not cover the record type `R`; a mismatch there surfaces only as a bincode deserialization error.
 
-#### Visualization files: `draw` operation
+#### Visualization files: `export::gexf::draw` operation
 
-`draw(path)` produces one `.gexf` file per HNSW graph layer, with the naming pattern:
+`export::gexf::draw(&model, path)` produces one `.gexf` file per HNSW graph layer, with the naming pattern:
 
 ```
 <stem>_layer0.gexf   ← base layer (all nodes)
@@ -115,7 +117,7 @@ The header does not cover the record type `R` or the distance type `D`, so a fil
 
 where `<stem>` is the base name without extension of the received `path`. Example: `draw("model/graph.gexf")` produces `model/graph_layer0.gexf`, `model/graph_layer1.gexf`, etc. The number of files depends on the graph height built during insertion.
 
-The content is GEXF XML with a node attribute schema added manually as a workaround for a limitation of the `gexf` crate, which does not natively support schema declaration.
+The content is GEXF XML; the node attribute schema is declared by the `gexf` crate itself.
 
 #### Benchmark data file
 

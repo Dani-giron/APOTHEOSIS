@@ -42,7 +42,7 @@ Approximate nearest-neighbor search system by similarity (primarily TLSH). The s
 
 **`hnsw.rs`**: approximate search index. Organizes elements in a multilayer graph where nearest neighbors are connected. Search starts at the top layers (global view, long jumps) and narrows down to the base layer (local view, precision). Result: finds the K most similar without comparing against all.
 
-**`apotheosis.rs`**: system facade. Single public entry point. Coordinates the two indices and the record store, keeping them synchronized. Also handles persistence (save/load model to disk) and export for visualization. External users interact only with this module.
+**`apotheosis.rs`**: system facade. Single public entry point. Coordinates the two indices and the record store, keeping them synchronized. Also handles persistence (save/load model to disk). GEXF export for visualization lives in `export/gexf.rs` and consumes the facade through its public read API.
 
 ---
 
@@ -114,11 +114,21 @@ Approximate nearest-neighbor search system by similarity (primarily TLSH). The s
 
 | Field | Content |
 |---|---|
-| Responsibility | Public system facade. Coordinates the two indices and the record store, guarantees the synchrony invariant, and exposes persistence and export. |
+| Responsibility | Public system facade. Coordinates the two indices and the record store, guarantees the synchrony invariant, and exposes persistence. |
 | Public structs | `Apotheosis<R, D, const M, const M0, const EF, const HEURISTIC>` |
-| Public methods | `new()`, `insert(item: R) -> bool` (false if duplicate), `search(query, k, ef_search) -> Vec<(u32, &R)>`, `dump(path)`, `load(path)`, `draw(path)` |
-| External dependencies | `bincode`, `gexf`, `serde` |
+| Public methods | `new()`, `insert(item: R) -> bool` (false if duplicate), `search(query, k, ef_search) -> Vec<(u32, &R)>`, `dump(path)`, `load(path)`, plus read accessors `len()`, `is_empty()`, `draw_model()`, `record(index)` |
+| External dependencies | `bincode`, `serde`, `tracing` |
 | Configuration parameters | Inherits `M`, `M0`, `EF` from `Hnsw`; `ef_search` in `search()` is optional at runtime. |
+
+#### `export/gexf.rs`
+
+| Field | Content |
+|---|---|
+| Responsibility | GEXF visualization export. Builds one GEXF file per HNSW layer from the facade's public read API. |
+| Public structs | (none) |
+| Public methods | `draw(model, path)` |
+| External dependencies | `gexf` |
+| Configuration parameters | (none) |
 
 ---
 
@@ -136,6 +146,8 @@ The uses view documents the real import relationships between modules, extracted
 | `controllers/apotheosis.rs` | `datalayer/record.rs` | `ApotheosisRecord`, `RadixKeyMapping` | Bound on `R`; calls `search_id()`, `to_radix_key()`, `get_attributes()` |
 | `controllers/hnsw.rs` | `datalayer/algorithms.rs` | `DistanceAlgorithm<ID>` | Bound on `D`; calls `calculate_distance()` on every node comparison |
 | `controllers/hnsw.rs` | `datalayer/nodes.rs` | `HnswNode<M>`, `HnswNode<M0>` | Nodes of `upper_layers` and `zero_layer` respectively |
+| `export/gexf.rs` | `controllers/apotheosis.rs` | `Apotheosis` | Calls `draw_model()` and `record()` to read the graph structure and node attributes |
+| `export/gexf.rs` | `datalayer/record.rs` | `ApotheosisRecord` | Bound on `R`; calls `get_attributes()` |
 | `controllers/radix_tree.rs` | (none) | (none) | No internal project dependencies |
 | `datalayer/algorithms.rs` | (none) | (none) | No internal project dependencies |
 | `datalayer/nodes.rs` | (none) | (none) | No internal project dependencies |
