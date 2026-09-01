@@ -46,7 +46,7 @@ type ApoNumSmallSat = Apotheosis<SimpleNumberRecord, NormalDistance, 4, 8, 100>;
 fn sync_invariant_min_viable() {
     let mut idx = ApoMinViable::new();
     for i in 0..10u32 {
-        idx.insert(SimpleNumberRecord::create(i.to_string())); // safe: keys are unique
+        idx.insert(SimpleNumberRecord::create(i.to_string()).unwrap()); // safe: keys are unique
     }
     let zero_len = idx.draw_model()[0].0.len();
     assert_eq!(idx.len(), 10);
@@ -58,7 +58,7 @@ fn sync_invariant_min_viable() {
 fn sync_invariant_inverted_ratio() {
     let mut idx = ApoInverted::new();
     for i in 0..10u32 {
-        idx.insert(SimpleNumberRecord::create(i.to_string())); // safe: keys are unique
+        idx.insert(SimpleNumberRecord::create(i.to_string()).unwrap()); // safe: keys are unique
     }
     let zero_len = idx.draw_model()[0].0.len();
     assert_eq!(idx.len(), 10);
@@ -70,7 +70,7 @@ fn sync_invariant_inverted_ratio() {
 fn sync_invariant_equal_m_m0() {
     let mut idx = ApoEqualMM0::new();
     for i in 0..10u32 {
-        idx.insert(SimpleNumberRecord::create(i.to_string())); // safe: keys are unique
+        idx.insert(SimpleNumberRecord::create(i.to_string()).unwrap()); // safe: keys are unique
     }
     let zero_len = idx.draw_model()[0].0.len();
     assert_eq!(idx.len(), 10);
@@ -82,7 +82,7 @@ fn sync_invariant_equal_m_m0() {
 fn sync_invariant_dense() {
     let mut idx = ApoDense::new();
     for i in 0..10u32 {
-        idx.insert(SimpleNumberRecord::create(i.to_string())); // safe: keys are unique
+        idx.insert(SimpleNumberRecord::create(i.to_string()).unwrap()); // safe: keys are unique
     }
     let zero_len = idx.draw_model()[0].0.len();
     assert_eq!(idx.len(), 10);
@@ -102,7 +102,7 @@ fn sync_invariant_dense() {
 fn search_no_panic_min_viable() {
     let mut idx = ApoMinViable::new();
     for i in 0..10u32 {
-        idx.insert(SimpleNumberRecord::create(i.to_string())); // safe: keys are unique
+        idx.insert(SimpleNumberRecord::create(i.to_string()).unwrap()); // safe: keys are unique
     }
     let k = 3;
     // Query not in dataset → ANN path. ef_search=None → unwrap_or(24) inside search().
@@ -122,7 +122,7 @@ fn search_no_panic_min_viable() {
 fn search_no_panic_inverted_ratio() {
     let mut idx = ApoInverted::new();
     for i in 0..10u32 {
-        idx.insert(SimpleNumberRecord::create(i.to_string())); // safe: keys are unique
+        idx.insert(SimpleNumberRecord::create(i.to_string()).unwrap()); // safe: keys are unique
     }
     let k = 3;
     let results = idx.search(&9999u32, k, None);
@@ -141,7 +141,7 @@ fn search_no_panic_inverted_ratio() {
 fn search_no_panic_equal_m_m0() {
     let mut idx = ApoEqualMM0::new();
     for i in 0..10u32 {
-        idx.insert(SimpleNumberRecord::create(i.to_string())); // safe: keys are unique
+        idx.insert(SimpleNumberRecord::create(i.to_string()).unwrap()); // safe: keys are unique
     }
     let k = 3;
     let results = idx.search(&9999u32, k, None);
@@ -160,7 +160,7 @@ fn search_no_panic_equal_m_m0() {
 fn search_no_panic_dense() {
     let mut idx = ApoDense::new();
     for i in 0..10u32 {
-        idx.insert(SimpleNumberRecord::create(i.to_string())); // safe: keys are unique
+        idx.insert(SimpleNumberRecord::create(i.to_string()).unwrap()); // safe: keys are unique
     }
     let k = 3;
     let results = idx.search(&9999u32, k, None);
@@ -188,7 +188,7 @@ fn search_no_panic_dense() {
 fn search_ef_search_greater_than_n() {
     let mut idx = ApoDefault::new();
     for i in 0..10u32 {
-        idx.insert(SimpleNumberRecord::create(i.to_string())); // safe: keys are unique
+        idx.insert(SimpleNumberRecord::create(i.to_string()).unwrap()); // safe: keys are unique
     }
     let k = 5;
     let results = idx.search(&9999u32, k, Some(1000));
@@ -209,7 +209,7 @@ fn search_ef_search_greater_than_n() {
 fn search_k_greater_than_ef_search() {
     let mut idx = ApoDefault::new();
     for i in 0..20u32 {
-        idx.insert(SimpleNumberRecord::create(i.to_string())); // safe: keys are unique
+        idx.insert(SimpleNumberRecord::create(i.to_string()).unwrap()); // safe: keys are unique
     }
     let k = 10;
     let results = idx.search(&9999u32, k, Some(2));
@@ -241,7 +241,7 @@ fn eviction_under_saturation_keeps_graph_consistent() {
     let mut idx = ApoNumSmallSat::new();
     let n = 300u32;
     for i in 0..n {
-        idx.insert(SimpleNumberRecord::create(i.to_string()));
+        idx.insert(SimpleNumberRecord::create(i.to_string()).unwrap());
     }
 
     // Every key must still resolve exactly through the radix fast-path.

@@ -39,7 +39,7 @@ fn tlsh_exact_match_returns_inserted_record() {
     let digests = build_digests(30);
     let mut idx = ApoTlsh::new();
     for d in &digests {
-        idx.insert(SimpleTlshRecord::create(hash_string(d)));
+        idx.insert(SimpleTlshRecord::create(hash_string(d)).unwrap());
     }
 
     for d in &digests {
@@ -64,7 +64,7 @@ fn tlsh_ann_nearest_matches_brute_force() {
 
     let mut idx = ApoTlsh::new();
     for d in dataset {
-        idx.insert(SimpleTlshRecord::create(hash_string(d)));
+        idx.insert(SimpleTlshRecord::create(hash_string(d)).unwrap());
     }
 
     let dist = TlshDistance;
@@ -96,7 +96,7 @@ fn tlsh_dump_load_roundtrip_preserves_results() {
     let digests = build_digests(20);
     let mut idx = ApoTlsh::new();
     for d in &digests {
-        idx.insert(SimpleTlshRecord::create(hash_string(d)));
+        idx.insert(SimpleTlshRecord::create(hash_string(d)).unwrap());
     }
 
     let query = &digests[3];

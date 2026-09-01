@@ -23,7 +23,7 @@ fn build_dataset_default() -> ApoNumDefault {
     let mut idx = ApoNumDefault::new();
     for i in 0..10u32 {
         assert!(
-            idx.insert(SimpleNumberRecord::create(i.to_string())),
+            idx.insert(SimpleNumberRecord::create(i.to_string()).unwrap()),
             "insert unexpectedly returned false for key {i}"
         );
     }
@@ -34,7 +34,7 @@ fn build_dataset_small() -> ApoNumSmall {
     let mut idx = ApoNumSmall::new();
     for i in 0..10u32 {
         assert!(
-            idx.insert(SimpleNumberRecord::create(i.to_string())),
+            idx.insert(SimpleNumberRecord::create(i.to_string()).unwrap()),
             "insert unexpectedly returned false for key {i}"
         );
     }
@@ -45,7 +45,7 @@ fn build_dataset_heuristic() -> ApoNumHeuristic {
     let mut idx = ApoNumHeuristic::new();
     for i in 0..10u32 {
         assert!(
-            idx.insert(SimpleNumberRecord::create(i.to_string())),
+            idx.insert(SimpleNumberRecord::create(i.to_string()).unwrap()),
             "insert unexpectedly returned false for key {i}"
         );
     }

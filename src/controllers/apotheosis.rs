@@ -86,7 +86,7 @@ where
         if let Some(ref key) = radix_key
             && self.radix.find(key).is_some()
         {
-            println!("Key already exists in radix tree: {:?}", key);
+            tracing::warn!("Key already exists in radix tree: {:?}", key);
             return false;
         }
 
