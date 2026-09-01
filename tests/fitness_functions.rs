@@ -26,7 +26,7 @@ fn sync_invariant_holds_after_bulk_insert() {
     let mut idx = ApoNum::new();
 
     for i in 0..50u32 {
-        idx.insert(SimpleNumberRecord::create(i.to_string()));
+        idx.insert(SimpleNumberRecord::create(i.to_string()).unwrap());
     }
 
     let hnsw_len = idx.draw_model()[0].0.len();
@@ -59,7 +59,7 @@ fn sync_invariant_holds_after_bulk_insert() {
 #[test]
 fn insert_returns_true_for_new_keys() {
     let mut idx = ApoNum::new();
-    let result = idx.insert(SimpleNumberRecord::create("1".to_string()));
+    let result = idx.insert(SimpleNumberRecord::create("1".to_string()).unwrap());
     assert!(result, "insert() must return true for a new unique key");
 }
 
@@ -79,10 +79,10 @@ fn insert_returns_true_for_new_keys() {
 fn insert_returns_false_for_duplicate_keys() {
     let mut idx = ApoNum::new();
 
-    let first = idx.insert(SimpleNumberRecord::create("42".to_string()));
+    let first = idx.insert(SimpleNumberRecord::create("42".to_string()).unwrap());
     assert!(first, "first insert of key '42' must return true");
 
-    let second = idx.insert(SimpleNumberRecord::create("42".to_string()));
+    let second = idx.insert(SimpleNumberRecord::create("42".to_string()).unwrap());
     assert!(!second, "duplicate insert of key '42' must return false");
 }
 
@@ -102,7 +102,7 @@ fn insert_returns_false_for_duplicate_keys() {
 #[test]
 fn search_returns_exact_match_via_fast_path() {
     let mut idx = ApoNum::new();
-    idx.insert(SimpleNumberRecord::create("100".to_string()));
+    idx.insert(SimpleNumberRecord::create("100".to_string()).unwrap());
 
     let query: u32 = 100;
     let results = idx.search(&query, 1, None);
@@ -130,7 +130,7 @@ fn search_returns_k_or_fewer_results() {
     let mut idx = ApoNum::new();
 
     for i in 0..10u32 {
-        idx.insert(SimpleNumberRecord::create(i.to_string()));
+        idx.insert(SimpleNumberRecord::create(i.to_string()).unwrap());
     }
 
     let query: u32 = 5;
@@ -163,7 +163,7 @@ fn dump_load_roundtrip_preserves_search_results() {
 
     let mut idx = ApoNum::new();
     for i in 0..20u32 {
-        idx.insert(SimpleNumberRecord::create(i.to_string()));
+        idx.insert(SimpleNumberRecord::create(i.to_string()).unwrap());
     }
 
     let query: u32 = 7;
@@ -205,10 +205,10 @@ fn dump_load_roundtrip_preserves_search_results() {
 fn sync_invariant_holds_after_duplicate_insert() {
     let mut idx = ApoNum::new();
 
-    let first = idx.insert(SimpleNumberRecord::create("7".to_string()));
+    let first = idx.insert(SimpleNumberRecord::create("7".to_string()).unwrap());
     assert!(first, "first insert must return true");
 
-    let second = idx.insert(SimpleNumberRecord::create("7".to_string()));
+    let second = idx.insert(SimpleNumberRecord::create("7".to_string()).unwrap());
     assert!(!second, "duplicate insert must return false");
 
     let zero_layer_count = idx.draw_model()[0].0.len();
@@ -239,7 +239,7 @@ fn sync_invariant_maps_every_key_to_its_own_record() {
     let mut idx = ApoNum::new();
     let n = 100u32;
     for i in 0..n {
-        idx.insert(SimpleNumberRecord::create(i.to_string()));
+        idx.insert(SimpleNumberRecord::create(i.to_string()).unwrap());
     }
 
     for key in 0..n {

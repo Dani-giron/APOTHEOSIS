@@ -52,6 +52,13 @@ where
     D: DistanceAlgorithm<ID> + Default,
 {
     pub fn new() -> Self {
+        const {
+            assert!(
+                M >= 2,
+                "M must be >= 2: with M=1, ln(1)=0 in random_level() diverges to usize::MAX"
+            );
+        };
+
         Self {
             features: vec![],
             upper_layers: vec![],

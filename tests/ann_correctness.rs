@@ -34,7 +34,7 @@ fn ann_recall_matches_brute_force() {
     let mut inserted = vec![];
     for i in 0..300u32 {
         let value = i * 2;
-        idx.insert(SimpleNumberRecord::create(value.to_string()));
+        idx.insert(SimpleNumberRecord::create(value.to_string()).unwrap());
         inserted.push(value);
     }
 
@@ -94,7 +94,7 @@ fn multi_layer_search_correct_across_layers() {
     let mut inserted = vec![];
     for i in 0..300u32 {
         let value = i * 3;
-        idx.insert(SimpleNumberRecord::create(value.to_string()));
+        idx.insert(SimpleNumberRecord::create(value.to_string()).unwrap());
         inserted.push(value);
     }
 
@@ -160,8 +160,8 @@ fn heuristic_produces_different_graph_than_greedy() {
     let mut heuristic = ApoNumHeuristic::new();
 
     for i in 0..n {
-        greedy.insert(SimpleNumberRecord::create(i.to_string())); // safe: sequential, unique
-        heuristic.insert(SimpleNumberRecord::create(i.to_string())); // safe: sequential, unique
+        greedy.insert(SimpleNumberRecord::create(i.to_string()).unwrap()); // safe: sequential, unique
+        heuristic.insert(SimpleNumberRecord::create(i.to_string()).unwrap()); // safe: sequential, unique
     }
 
     // Collect edge sets as sorted (src, dst) string pairs - direction-agnostic.

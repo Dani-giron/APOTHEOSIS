@@ -1,0 +1,16 @@
+[book]
+title = "APOTHEOSIS2 Architecture"
+authors = ["Daniel Huici", "Ricardo J. Rodriguez"]
+description = "Architectural documentation (Views and Beyond) for the APOTHEOSIS2 similarity search library."
+language = "en"
+src = "architecture"
+
+[output.html]
+git-repository-url = "https://github.com/reverseame/APOTHEOSIS"
+edit-url-template = "https://github.com/reverseame/APOTHEOSIS/edit/apotheosis2/docs/architecture/{path}"
+additional-js = ["mermaid.min.js", "mermaid-init.js"]
+
+[preprocessor]
+
+[preprocessor.mermaid]
+command = "mdbook-mermaid"
