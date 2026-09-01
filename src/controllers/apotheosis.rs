@@ -109,17 +109,13 @@ where
         self.records.is_empty()
     }
 
-    /// Structural view of the HNSW graph, one entry per layer: node feature
-    /// indices and their edges (source id, target id, distance). Needed by
-    /// `export::gexf`, which lives outside this impl and cannot reach `hnsw`
-    /// directly now that it is private.
+    /// HNSW nodes and edges per layer, layer 0 first.
     #[allow(clippy::type_complexity)]
     pub fn draw_model(&self) -> Vec<(Vec<usize>, Vec<(String, String, f32)>)> {
         self.hnsw.draw_model()
     }
 
-    /// Read-only access to a record by its index. Node indices returned by
-    /// `draw_model()` can be resolved to their full records through this.
+    /// Record at `index`; resolves the node indices returned by `draw_model()`.
     pub fn record(&self, index: usize) -> Option<&R> {
         self.records.get(index)
     }
