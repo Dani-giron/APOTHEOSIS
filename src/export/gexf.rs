@@ -54,48 +54,11 @@ pub fn draw<R, D, const M: usize, const M0: usize, const EF: usize, const HEURIS
             );
         }
 
-        let _ = save_gexf(model, base_path, layer_idx, &gexf);
+        let _ = save_gexf(base_path, layer_idx, &gexf);
     }
 }
 
-// Once draw is built, we need to add the attribute schema to the GEXF XML
-// Has to be done manually since gexf crate does not support it yet.
-fn add_attribute_schema(xml: String, attributes: Vec<(String, String)>) -> String {
-    if let Some(graph_start) = xml.find("<graph")
-        && let Some(graph_end_offset) = xml[graph_start..].find(">")
-    {
-        let insert_pos = graph_start + graph_end_offset + 1;
-
-        let mut attrs = String::from("\n    <attributes class=\"node\">\n");
-        for (attribute_key, _) in attributes {
-            attrs.push_str(&format!(
-                "      <attribute id=\"{}\" title=\"{}\" type=\"string\"/>\n",
-                attribute_key, attribute_key
-            ));
-        }
-        attrs.push_str("    </attributes>\n");
-
-        let mut result = String::new();
-        result.push_str(&xml[..insert_pos]);
-        result.push_str(&attrs);
-        result.push_str(&xml[insert_pos..]);
-
-        return result;
-    }
-
-    xml
-}
-
-fn save_gexf<R, D, const M: usize, const M0: usize, const EF: usize, const HEURISTIC: bool>(
-    model: &Apotheosis<R, D, M, M0, EF, HEURISTIC>,
-    base_path: &Path,
-    layer_idx: usize,
-    gexf: &Gexf,
-) -> std::io::Result<()>
-where
-    R: ApotheosisRecord,
-    D: DistanceAlgorithm<R::MetricId> + Default,
-{
+fn save_gexf(base_path: &Path, layer_idx: usize, gexf: &Gexf) -> std::io::Result<()> {
     let mut file_path = PathBuf::from(base_path);
 
     if let Some(stem) = file_path.file_stem().and_then(|s| s.to_str()) {
@@ -107,12 +70,6 @@ where
         file_path = PathBuf::from(filename);
     }
 
-    let fixed_xml = if let Some(first_record) = model.record(0) {
-        add_attribute_schema(gexf.to_string().unwrap(), first_record.get_attributes())
-    } else {
-        gexf.to_string().unwrap()
-    };
-
-    fs::write(file_path, fixed_xml)?;
+    fs::write(file_path, gexf.to_string().unwrap())?;
     Ok(())
 }
