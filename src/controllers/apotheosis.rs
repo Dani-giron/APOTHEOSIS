@@ -12,19 +12,10 @@ use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
-/// FNV-1a hash of a string, used to encode the distance type identity in the
-/// model header. Chosen over `std` hashers because it is fully specified and
-/// stable across Rust versions, which a persistence format requires.
-const fn fnv1a(s: &str) -> u32 {
-    let bytes = s.as_bytes();
-    let mut hash: u32 = 0x811c_9dc5;
-    let mut i = 0;
-    while i < bytes.len() {
-        hash ^= bytes[i] as u32;
-        hash = hash.wrapping_mul(0x0100_0193);
-        i += 1;
-    }
-    hash
+/// Last path segment of the type name, e.g.
+/// "apotheosis2::datalayer::algorithms::TlshDistance" -> "TlshDistance".
+fn distance_name<T>() -> &'static str {
+    std::any::type_name::<T>().rsplit("::").next().unwrap()
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -152,9 +143,9 @@ where
         file.write_all(&(M0 as u32).to_le_bytes())?;
         file.write_all(&(EF as u32).to_le_bytes())?;
         file.write_all(&[HEURISTIC as u8])?;
-        // Write the distance type identity as an FNV-1a hash (4 bytes)
-        let distance_id = fnv1a(<D as DistanceAlgorithm<R::MetricId>>::TYPE_NAME);
-        file.write_all(&distance_id.to_le_bytes())?;
+        let name = distance_name::<D>().as_bytes();
+        file.write_all(&[u8::try_from(name.len())?])?;
+        file.write_all(name)?;
 
         // Then write the model data
         bincode::serialize_into(file, self)?;
@@ -167,8 +158,8 @@ where
     {
         let mut file = File::open(path)?;
 
-        // Read and verify header (21 bytes)
-        let mut header = [0u8; 21];
+        // Read and verify header (17 bytes + distance type name)
+        let mut header = [0u8; 17];
         file.read_exact(&mut header)?;
 
         if &header[0..4] != b"APOT" {
@@ -187,16 +178,18 @@ where
             ).into());
         }
 
-        // The distance type is not part of the serialized body (bincode does
-        // not depend on D), so it must be checked explicitly: loading a model
-        // built with one distance into a type using another returns wrong
-        // results with no error otherwise.
-        let file_distance_id = u32::from_le_bytes(header[17..21].try_into()?);
-        let expected_distance_id = fnv1a(<D as DistanceAlgorithm<R::MetricId>>::TYPE_NAME);
-        if file_distance_id != expected_distance_id {
+        // Explicit check of distance type (does not rely on bincode)
+        let mut name_len = [0u8; 1];
+        file.read_exact(&mut name_len)?;
+        let mut name = vec![0u8; name_len[0] as usize];
+        file.read_exact(&mut name)?;
+        let file_distance = String::from_utf8_lossy(&name);
+
+        let expected = distance_name::<D>();
+        if file_distance != expected {
             return Err(format!(
-                "Distance type mismatch. File was built with a different distance than the loading type (expected {}). Load the model with the distance it was created with",
-                <D as DistanceAlgorithm<R::MetricId>>::TYPE_NAME
+                "Distance type mismatch. File was built with {} but is being loaded as {}",
+                file_distance, expected
             )
             .into());
         }
@@ -211,7 +204,6 @@ where
     ///
     /// # Parameters
     /// * `path` - Base filename for output (e.g., "model" creates "model_layer0.gexf", "model_layer1.gexf", etc.)
-
     pub fn draw<P: AsRef<Path>>(&self, path: P) {
         let base_path = path.as_ref();
 
