@@ -20,7 +20,8 @@ use std::path::{Path, PathBuf};
 pub fn draw<R, D, const M: usize, const M0: usize, const EF: usize, const HEURISTIC: bool, P>(
     model: &Apotheosis<R, D, M, M0, EF, HEURISTIC>,
     path: P,
-) where
+) -> Result<(), Box<dyn std::error::Error>>
+where
     R: ApotheosisRecord,
     D: DistanceAlgorithm<R::MetricId> + Default,
     P: AsRef<Path>,
@@ -54,11 +55,17 @@ pub fn draw<R, D, const M: usize, const M0: usize, const EF: usize, const HEURIS
             );
         }
 
-        let _ = save_gexf(base_path, layer_idx, &gexf);
+        save_gexf(base_path, layer_idx, &gexf)?;
     }
+
+    Ok(())
 }
 
-fn save_gexf(base_path: &Path, layer_idx: usize, gexf: &Gexf) -> std::io::Result<()> {
+fn save_gexf(
+    base_path: &Path,
+    layer_idx: usize,
+    gexf: &Gexf,
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut file_path = PathBuf::from(base_path);
 
     if let Some(stem) = file_path.file_stem().and_then(|s| s.to_str()) {
@@ -70,6 +77,6 @@ fn save_gexf(base_path: &Path, layer_idx: usize, gexf: &Gexf) -> std::io::Result
         file_path = PathBuf::from(filename);
     }
 
-    fs::write(file_path, gexf.to_string().unwrap())?;
+    fs::write(file_path, gexf.to_string()?)?;
     Ok(())
 }

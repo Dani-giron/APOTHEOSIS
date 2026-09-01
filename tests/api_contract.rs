@@ -76,7 +76,7 @@ fn draw_produces_one_gexf_file_per_layer() {
     }
 
     let layer_count = idx.draw_model().len();
-    apotheosis2::export::gexf::draw(&idx, &base);
+    apotheosis2::export::gexf::draw(&idx, &base).expect("draw() must succeed for this dataset");
 
     for n in 0..layer_count {
         let f = PathBuf::from(format!("{}/model_layer{}.gexf", dir, n));

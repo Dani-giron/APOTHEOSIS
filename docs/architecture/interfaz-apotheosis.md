@@ -207,7 +207,10 @@ The bound `where Self: serde::de::DeserializeOwned` imposes the same restriction
 
 ```rust
 // free function in the export::gexf module, not a facade method
-pub fn draw<R, D, /* const params */, P: AsRef<Path>>(model: &Apotheosis<...>, path: P)
+pub fn draw<R, D, /* const params */, P: AsRef<Path>>(
+    model: &Apotheosis<...>,
+    path: P,
+) -> Result<(), Box<dyn std::error::Error>>
 ```
 
 **Semantics**
@@ -218,7 +221,7 @@ Each GEXF file contains nodes (one per entry in that HNSW layer, identified by i
 
 **Error Handling**
 
-Does not return `Result`. I/O errors when writing each GEXF file are silently discarded: the code uses `let _ = save_gexf(...)`. GEXF XML serialization errors (`gexf.to_string().unwrap()`) produce a panic.
+Returns `Err` on I/O errors when writing a GEXF file and on GEXF XML serialization errors. The first failing layer aborts the export; files already written remain on disk.
 
 
 
@@ -545,15 +548,15 @@ The crate does not adopt a uniform error-handling strategy: different methods us
 
 #### `Result<_, Box<dyn std::error::Error>>`
 
-Used by `dump`, `load`, and the `create` record constructors. The error type is a dynamic trait object that can wrap any I/O or serialization error. The caller must match on or propagate the error with `?`. There are no structured error types that would allow programmatic distinction between the possible causes (I/O failure, parameter mismatch, malformed file).
+Used by `dump`, `load`, `export::gexf::draw`, and the `create` record constructors. The error type is a dynamic trait object that can wrap any I/O or serialization error. The caller must match on or propagate the error with `?`. There are no structured error types that would allow programmatic distinction between the possible causes (I/O failure, parameter mismatch, malformed file).
 
 #### Panics
 
-`export::gexf::draw` can panic if the internal GEXF XML serialization fails (`gexf.to_string().unwrap()` in `save_gexf`). No public facade method has identifiable panics in the normal flow; the `create` record constructors return `Err` on malformed input instead of panicking.
+No public method has identifiable panics in the normal flow: `export::gexf::draw` returns `Err` instead of panicking on serialization failures, and the `create` record constructors return `Err` on malformed input.
 
 #### Absence of error return
 
-`insert` returns `bool` rather than `Result`: duplicate keys are signaled with `false` and a warning, without propagating an error to the caller. `export::gexf::draw` has no explicit error paths: I/O errors when writing each GEXF file are silently discarded via `let _ = save_gexf(...)`.
+`insert` returns `bool` rather than `Result`: duplicate keys are signaled with `false` and a warning, without propagating an error to the caller.
 
 ---
 
