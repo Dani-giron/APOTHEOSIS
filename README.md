@@ -52,7 +52,7 @@ fn main() {
 
     let query = TlshDefault::from_str("<tlsh_hash_a>").expect("invalid TLSH hash");
 
-    // Pass None for ef_search; the effective value is 24.
+    // Passing None for ef_search applies the library default.
     let results: Vec<(u32, &SimpleTlshRecord)> = index.search(&query, 5, None);
 
     for (distance, record) in &results {
@@ -63,15 +63,15 @@ fn main() {
 
 ### Persistence and export
 
-A built model can be saved to disk and loaded back. `load()` validates the M, M0 and EF parameters in the file header against the loading type. The HNSW graph can also be exported to GEXF files (one per layer).
+A built model can be saved to disk and loaded back. `load()` validates the M, M0, EF and HEURISTIC parameters and the distance type recorded in the file header against the loading type, and refuses to load on any mismatch. The HNSW graph can also be exported to GEXF files (one per layer).
 
 ```rust
 // dump() and load() return Result.
 index.dump("model.bin")?;
 let loaded: Apotheosis<SimpleTlshRecord, TlshDistance> = Apotheosis::load("model.bin")?;
 
-// draw() writes model_layer0.gexf, model_layer1.gexf, ... next to the given base path.
-index.draw("model");
+// export::gexf::draw() writes model_layer0.gexf, model_layer1.gexf, ... next to the given base path.
+apotheosis2::export::gexf::draw(&index, "model");
 ```
 
 

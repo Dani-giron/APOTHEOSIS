@@ -20,7 +20,7 @@ type ApoNum = Apotheosis<SimpleNumberRecord, NormalDistance>;
 fn search_ann_path_returns_k_or_fewer_sorted_by_distance() {
     let mut idx = ApoNum::new();
     for i in 0..20u32 {
-        idx.insert(SimpleNumberRecord::create(i.to_string()));
+        idx.insert(SimpleNumberRecord::create(i.to_string()).unwrap());
     }
 
     let k = 5;
@@ -72,12 +72,11 @@ fn draw_produces_one_gexf_file_per_layer() {
 
     let mut idx = ApoNum::new();
     for i in 0..200u32 {
-        idx.insert(SimpleNumberRecord::create(i.to_string()));
+        idx.insert(SimpleNumberRecord::create(i.to_string()).unwrap());
     }
 
     let layer_count = idx.draw_model().len();
-    idx.draw(&base)
-        .expect("draw() must succeed for this dataset");
+    apotheosis2::export::gexf::draw(&idx, &base).expect("draw() must succeed for this dataset");
 
     for n in 0..layer_count {
         let f = PathBuf::from(format!("{}/model_layer{}.gexf", dir, n));
@@ -111,13 +110,13 @@ fn load_overwrites_previous_in_memory_state() {
 
     let mut idx_a = ApoNum::new();
     for i in 0..5u32 {
-        idx_a.insert(SimpleNumberRecord::create(i.to_string()));
+        idx_a.insert(SimpleNumberRecord::create(i.to_string()).unwrap());
     }
     idx_a.dump(path).expect("dump() must not fail");
 
     let mut idx_b = ApoNum::new();
     for i in 100..103u32 {
-        idx_b.insert(SimpleNumberRecord::create(i.to_string()));
+        idx_b.insert(SimpleNumberRecord::create(i.to_string()).unwrap());
     }
     idx_b = ApoNum::load(path).expect("load() must not fail");
 
@@ -203,7 +202,7 @@ fn load_rejects_truncated_file() {
 fn search_with_k_zero_returns_empty() {
     let mut idx = ApoNum::new();
     for i in 0..10u32 {
-        idx.insert(SimpleNumberRecord::create(i.to_string())); // safe: unique keys
+        idx.insert(SimpleNumberRecord::create(i.to_string()).unwrap()); // safe: unique keys
     }
     // Query not in dataset → ANN path → .take(0) → empty Vec.
     let results = idx.search(&9999u32, 0, None);
@@ -224,7 +223,7 @@ fn search_with_k_zero_returns_empty() {
 fn search_with_k_greater_than_n_returns_all() {
     let mut idx = ApoNum::new();
     for i in 0..10u32 {
-        idx.insert(SimpleNumberRecord::create(i.to_string())); // safe: unique keys
+        idx.insert(SimpleNumberRecord::create(i.to_string()).unwrap()); // safe: unique keys
     }
     let k = 100; // far larger than the 10 records
     let results = idx.search(&9999u32, k, None);

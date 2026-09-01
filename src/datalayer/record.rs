@@ -53,16 +53,18 @@ pub type SimpleNumberRecord = SimpleRecord<u32>;
 pub type SimpleTlshRecord = SimpleRecord<TlshDefault>;
 
 impl SimpleNumberRecord {
-    pub fn create(s: String) -> Self {
-        let id = s.parse::<u32>().unwrap();
-        Self { id, radix_key: s }
+    pub fn create(s: String) -> Result<Self, Box<dyn std::error::Error>> {
+        let id = s
+            .parse::<u32>()
+            .map_err(|e| format!("invalid number record {s:?}: {e}"))?;
+        Ok(Self { id, radix_key: s })
     }
 }
 
 impl SimpleTlshRecord {
-    pub fn create(s: String) -> Self {
-        let id = TlshDefault::from_str(&s).unwrap();
-        Self { id, radix_key: s }
+    pub fn create(s: String) -> Result<Self, Box<dyn std::error::Error>> {
+        let id = TlshDefault::from_str(&s).map_err(|_| format!("invalid TLSH hash {s:?}"))?;
+        Ok(Self { id, radix_key: s })
     }
 }
 
@@ -99,13 +101,16 @@ impl ApotheosisRecord for GenericJsonRecord {
 }
 
 impl GenericJsonRecord {
-    pub fn create(s: String, metadata: serde_json::Value) -> Self {
-        let id = TlshDefault::from_str(&s).unwrap();
-        Self {
+    pub fn create(
+        s: String,
+        metadata: serde_json::Value,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let id = TlshDefault::from_str(&s).map_err(|_| format!("invalid TLSH hash {s:?}"))?;
+        Ok(Self {
             id,
             radix_key: s,
             metadata,
-        }
+        })
     }
 }
 
