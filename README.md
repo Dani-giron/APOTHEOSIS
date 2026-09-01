@@ -70,8 +70,8 @@ A built model can be saved to disk and loaded back. `load()` validates the M, M0
 index.dump("model.bin")?;
 let loaded: Apotheosis<SimpleTlshRecord, TlshDistance> = Apotheosis::load("model.bin")?;
 
-// export::gexf::draw() writes model_layer0.gexf, model_layer1.gexf, ... next to the given base path.
-apotheosis2::export::gexf::draw(&index, "model");
+// export::gexf::draw() also returns Result and writes model_layer0.gexf, model_layer1.gexf, ...
+apotheosis2::export::gexf::draw(&index, "model")?;
 ```
 
 

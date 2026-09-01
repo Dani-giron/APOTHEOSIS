@@ -93,7 +93,7 @@ The course notes define *attachment* as the association between component ports 
 | `apo↔radix-lookup` | `<<call-return>>` | `Apotheosis::index-radix` | `RadixTree::lookup` | Input: `key: &[u8]` / Output: `Option<&RadixNode>` (Apotheosis extracts `Option<usize>` from `node.data`). If `Some(index)`: fast-path; if `None`: ANN path | First operation in every `search()` call. Its result determines which path is taken |
 | `apo→radix-insert` | `<<call-return>>` | `Apotheosis::index-radix` | `RadixTree::insert` | Input: `(key: Vec<u8>, index: usize)` / no return | Executed on every new insertion, always alongside `hnsw-insert` |
 | `apo↔fs-io` | `<<call-return>>` | `Apotheosis::persistence` | `FileSystem::io` | `dump(path)` writes to FS; `load(path)` reads from FS into Apotheosis | Bidirectional. `load` reconstructs the full model in memory |
-| `apo→fs-gexf` | `<<call-return>>` | `Apotheosis::persistence` | `FileSystem::gexf-out` | `export::gexf::draw(&model, path)` writes one `.gexf` file per HNSW layer with pattern `<stem>_layer<N>.gexf` | Write only. No return value |
+| `apo→fs-gexf` | `<<call-return>>` | `Apotheosis::persistence` | `FileSystem::gexf-out` | `export::gexf::draw(&model, path)` writes one `.gexf` file per HNSW layer with pattern `<stem>_layer<N>.gexf` | Write only. Returns `Result`: the first failed write or serialization aborts the export |
 | `fs→gephi` | `<<file-read>>` | `FileSystem::gexf-out` | `Gephi::gexf-in` | `.gexf` file | Asynchronous with respect to APOTHEOSIS 2. Gephi opens the file independently; no runtime coupling |
 
 ### 2.3 Element Interfaces
